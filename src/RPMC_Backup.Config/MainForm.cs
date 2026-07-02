@@ -282,8 +282,8 @@ public class MainForm : Form
         btnSaveOrig.Top = _tabFolders.Height - btnSaveOrig.Height - 15;
         btnSaveOrig.Click += (s, e) => { if (!PromptAdminPassword("Guardar origenes")) return; SendIpc(Constants.CmdReconfig); MessageBox.Show("Configuración de origenes guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information); };
 
-        var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(820, 120), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
-        _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(800, 90), AutoScroll = true, Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom };
+        var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(500, 120) };
+        _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(480, 90), AutoScroll = true };
         progGroup.Controls.Add(_foldersProgressPanel);
 
         _tabFolders.Controls.AddRange(new Control[] { lblTree, treeFolders, _foldersList, txtFolderPath, _btnAddFolder, _btnRemoveFolder, progGroup, btnSaveOrig });
