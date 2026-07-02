@@ -246,15 +246,16 @@ public class InitWizardForm : Form
         sb.AppendLine($"Bucket: {_txtBucketName.Text}");
         sb.AppendLine($"Equipo: {_txtMachineName.Text}");
         sb.AppendLine($"Usuario: {_txtMachineUser.Text}");
-        sb.AppendLine();
-        sb.AppendLine("Carpetas a respaldar:");
-        foreach (var item in _chkFolders.CheckedItems)
-            sb.AppendLine($"  - {item}");
-        sb.AppendLine();
 
-        _lblSummary = new Label { Text = sb.ToString(), Location = new Point(20, 20), AutoSize = true };
-        var lblWarning = new Label { Text = "Los archivos eliminados en origen NO se eliminan en bucket.", Location = new Point(20, 220), AutoSize = true, ForeColor = Color.FromArgb(180, 150, 0) };
-        _contentPanel.Controls.AddRange(new Control[] { _lblSummary, lblWarning });
+        _lblSummary = new Label { Text = sb.ToString(), Location = new Point(20, 15), AutoSize = true };
+        var yFolders = _lblSummary.Bottom + 10;
+        var sbFolders = new System.Text.StringBuilder();
+        sbFolders.AppendLine("Carpetas a respaldar:");
+        foreach (var item in _chkFolders.CheckedItems)
+            sbFolders.AppendLine($"  - {item}");
+        var txtFolders = new TextBox { Text = sbFolders.ToString(), Location = new Point(20, yFolders), Width = 400, Height = 100, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical };
+        var lblWarning = new Label { Text = "Los archivos eliminados en origen NO se eliminan en bucket.", Location = new Point(20, txtFolders.Bottom + 8), AutoSize = true, ForeColor = Color.FromArgb(180, 150, 0) };
+        _contentPanel.Controls.AddRange(new Control[] { _lblSummary, txtFolders, lblWarning });
     }
 
     private async void NextStep()
