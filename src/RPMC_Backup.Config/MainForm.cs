@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO.Pipes;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Minio;
@@ -848,7 +849,7 @@ public class MainForm : Form
             var machine = cfg?.MachineName ?? Environment.MachineName;
             var user = cfg?.MachineUserName ?? Environment.UserName;
             string ip;
-            try { ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.First(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToString(); } catch { ip = "N/A"; }
+            try { ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(a) && a.GetAddressBytes()[0] != 169)?.ToString() ?? "N/A"; } catch { ip = "N/A"; }
             var body = $"Equipo: {machine}\nUsuario: {user}\nIP: {ip}\n\nEl servicio de respaldo ha entrado en estado de Atención. Revise los logs del sistema para más detalles.";
             SendAlertEmail($"RPMC Backup - Atención {machine}/{user}", body);
         }
