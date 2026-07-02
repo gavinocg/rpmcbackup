@@ -201,11 +201,13 @@ public class BackupService : BackgroundService
             try
             {
                 var prefix = $"{config.MachineName}/{config.MachineUserName}/";
+                _logger.LogInformation($"Checking bucket for existing data with prefix: {prefix}");
                 existing = await _uploader.ListExistingObjectsAsync(prefix, ct);
+                _logger.LogInformation($"Bucket check complete. Found {existing.Count} existing objects.");
                 if (existing.Count > 0)
                 {
                     _lastSyncTime = existing.Values.Max();
-                    _logger.LogInformation($"Bucket data detected: {existing.Count} objects. Using differential sync.");
+                    _logger.LogInformation($"Bucket data detected: {existing.Count} objects, newest: {_lastSyncTime:yyyy-MM-dd HH:mm:ss}. Using differential sync.");
                 }
             }
             catch (Exception ex)
