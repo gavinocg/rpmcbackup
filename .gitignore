@@ -1,0 +1,11 @@
+﻿# Build outputs
+bin/
+obj/
+Setup/*.exe
+src/**/bin/
+src/**/obj/
+*.exe
+*.pdb
+*.user
+*.suo
+.DS_Store
