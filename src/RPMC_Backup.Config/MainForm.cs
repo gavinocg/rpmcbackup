@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.IO.Pipes;
 using System.Net;
 using System.Text;
@@ -580,14 +581,18 @@ public class MainForm : Form
                 config.SmtpFrom,
                 config.AdminEmail,
                 "RPMC Backup - Código de recuperación de clave",
-                $"Su código de verificación es: {pin}\n\nVálido por {Constants.PinExpiryMinutes} minutos.\n\nSi no solicitó este cambio, ignore este mensaje."
+                $"Su código de verificación es: {pin}\n\n" +
+                $"Emitido: {DateTime.Now:yyyy-MM-dd HH:mm:ss} (hora local Ecuador)\n" +
+                $"Válido hasta: {expires.ToLocalTime():yyyy-MM-dd HH:mm:ss} (hora local Ecuador)\n" +
+                $"Válido por {Constants.PinExpiryMinutes} minutos.\n\n" +
+                $"Si no solicitó este cambio, ignore este mensaje."
             );
             smtp.Send(msg);
-            MessageBox.Show($"Se ha enviado un código de verificación a {config.AdminEmail}.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Se ha enviado un código de verificación a {config.AdminEmail}.\nEmitido: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"No se pudo enviar el correo: {ex.Message}\n\nSu código de verificación es: {pin}\n(Anote este código)", "Error de envío", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show($"No se pudo enviar el correo: {ex.Message}\n\nSu código de verificación es: {pin}\nEmitido: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\nVálido hasta: {expires.ToLocalTime():yyyy-MM-dd HH:mm:ss}\n(Anote este código)", "Error de envío", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         using var pinForm = new Form
@@ -612,9 +617,9 @@ public class MainForm : Form
             var stored = File.ReadAllText(Path.Combine(pinDir, Constants.PinFileName));
             var parts = stored.Split('|');
             if (parts.Length < 2) { MessageBox.Show("Error al leer código.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-            if (DateTime.TryParse(parts[1], out var exp) && DateTime.UtcNow > exp)
+            if (DateTime.TryParse(parts[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var exp) && DateTime.UtcNow > exp)
             {
-                MessageBox.Show("El código ha expirado. Solicite uno nuevo.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show($"El código ha expirado. (Emitido: {exp.ToLocalTime():yyyy-MM-dd HH:mm:ss}, expiró: {exp.ToLocalTime():yyyy-MM-dd HH:mm:ss}). Solicite uno nuevo.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             if (parts[0] != txtPin.Text.Trim())
@@ -657,6 +662,14 @@ public class MainForm : Form
                 RefreshStatus();
                 LoadConnectionConfig();
                 LoadSmtpConfig();
+                try
+                {
+                    var reg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                    if (reg?.GetValue("RPMC Backup") == null)
+                        reg?.SetValue("RPMC Backup", $"\"{Environment.ProcessPath}\" --minimized");
+                    reg?.Dispose();
+                }
+                catch { }
                 return;
             }
             _closingToTray = false;
