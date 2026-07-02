@@ -10,7 +10,7 @@ namespace RPMC_Backup.Service;
 
 public class MinioUploader
 {
-    private const string S3Region = "us-east-1";
+    private const string S3Region = "ec-pichincha-cay1";
     private const string S3Service = "s3";
     private const string UnsignedPayload = "UNSIGNED-PAYLOAD";
 
@@ -90,7 +90,11 @@ public class MinioUploader
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromHours(2));
             var response = await _http.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                throw new HttpRequestException($"Status: {(int)response.StatusCode}, Body: {errorBody}");
+            }
         }
         finally
         {

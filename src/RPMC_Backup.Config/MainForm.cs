@@ -849,7 +849,21 @@ public class MainForm : Form
             var machine = cfg?.MachineName ?? Environment.MachineName;
             var user = cfg?.MachineUserName ?? Environment.UserName;
             string ip;
-            try { ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(a) && a.GetAddressBytes()[0] != 169)?.ToString() ?? "N/A"; } catch { ip = "N/A"; }
+            try
+            {
+                ip = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                        && n.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback
+                        && !n.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase)
+                        && !n.Description.Contains("VMware", StringComparison.OrdinalIgnoreCase)
+                        && !n.Description.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                    .FirstOrDefault(u => u.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                        && !System.Net.IPAddress.IsLoopback(u.Address)
+                        && u.Address.GetAddressBytes()[0] != 169)
+                    ?.Address.ToString() ?? "N/A";
+            }
+            catch { ip = "N/A"; }
             var body = $"Equipo: {machine}\nUsuario: {user}\nIP: {ip}\n\nEl servicio de respaldo ha entrado en estado de Atención. Revise los logs del sistema para más detalles.";
             SendAlertEmail($"RPMC Backup - Atención {machine}/{user}", body);
         }
