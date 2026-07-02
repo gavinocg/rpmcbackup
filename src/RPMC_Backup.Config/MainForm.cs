@@ -137,8 +137,8 @@ public class MainForm : Form
         _btnStop = new Button { Location = new Point(630, 15), Size = new Size(60, 22), Text = "Detener" };
         _btnPause = new Button { Location = new Point(700, 15), Size = new Size(60, 22), Text = "Pausar" };
         _btnResume = new Button { Location = new Point(770, 15), Size = new Size(65, 22), Text = "Reanudar", Enabled = false };
-        _btnStop.Click += (s, e) => { if (PromptAdminPassword("Detener servicio")) { SendIpc(Constants.CmdStop); RefreshStatus(); } };
-        _btnPause.Click += (s, e) => { if (PromptAdminPassword("Pausar respaldo")) { SendIpc(Constants.CmdPause); RefreshStatus(); } };
+        _btnStop.Click += (s, e) => { SendIpc(Constants.CmdStop); RefreshStatus(); };
+        _btnPause.Click += (s, e) => { SendIpc(Constants.CmdPause); RefreshStatus(); };
         _btnResume.Click += (s, e) => { SendIpc(Constants.CmdResume); RefreshStatus(); };
         statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblErrors, _btnStop, _btnPause, _btnResume });
 
@@ -677,16 +677,23 @@ public class MainForm : Form
             return;
         }
         var cmdArgs = Environment.GetCommandLineArgs();
-        if (cmdArgs.Length > 1 && (cmdArgs[1] == "--minimized" || cmdArgs[1] == "--start-service" || cmdArgs[1] == "--install-service"))
+        if (cmdArgs.Length > 1 && (cmdArgs[1] == "--start-service" || cmdArgs[1] == "--install-service"))
         {
-            if (cmdArgs[1] == "--minimized")
-                BeginInvoke(() => { ShowInTaskbar = false; Hide(); });
         }
-        else if (!PromptAdminPassword("Abrir Configuración"))
+        else
         {
-            _closingToTray = false;
-            Close();
-            return;
+            BeginInvoke(() => { ShowInTaskbar = false; Hide(); });
+            try
+            {
+                var psi = new ProcessStartInfo("sc", "start rpmc-backup-service")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                var p = Process.Start(psi);
+                p?.WaitForExit(3000);
+            }
+            catch { }
         }
         _statusTimer = new System.Windows.Forms.Timer { Interval = Constants.TrayPollIntervalMs };
         _statusTimer.Tick += async (s, ev) => await Task.Run(() => RefreshStatus());
