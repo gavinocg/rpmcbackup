@@ -57,4 +57,12 @@ public class ServiceStateInfo
     public int SyncProgress { get; set; }
     public string DataError { get; set; } = string.Empty;
     public string ConnectionError { get; set; } = string.Empty;
+    public List<FolderProgress> FoldersProgress { get; set; } = new();
+}
+
+public class FolderProgress
+{
+    public string Folder { get; set; } = string.Empty;
+    public int Total { get; set; }
+    public int Completed { get; set; }
 }

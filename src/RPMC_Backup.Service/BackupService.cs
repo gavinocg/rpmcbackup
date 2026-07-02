@@ -30,6 +30,8 @@ public class BackupService : BackgroundService
     private volatile string _connectionError = string.Empty;
     private int _healthCheckCounter;
     private HashSet<string> _excludedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _folderTotal = new();
+    private readonly Dictionary<string, int> _folderCompleted = new();
 
     public ServiceStateInfo GetState()
     {
@@ -44,7 +46,13 @@ public class BackupService : BackgroundService
             IsSyncing = _isSyncing,
             SyncProgress = _syncTotal > 0 ? Math.Min((int)(100.0 * _syncCompleted / _syncTotal), 100) : (_isSyncing ? 0 : 100),
             DataError = _dataError,
-            ConnectionError = _connectionError
+            ConnectionError = _connectionError,
+            FoldersProgress = _folderTotal.Select(kv => new FolderProgress
+            {
+                Folder = kv.Key,
+                Total = kv.Value,
+                Completed = _folderCompleted.TryGetValue(kv.Key, out var c) ? c : 0
+            }).ToList()
         };
     }
 
@@ -203,12 +211,21 @@ public class BackupService : BackgroundService
         _isSyncing = true;
         _syncTotal = fileList.Count;
         _syncCompleted = 0;
+        _folderTotal.Clear();
+        _folderCompleted.Clear();
+        foreach (var (f, _) in fileList)
+        {
+            if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;
+            _folderTotal[f]++;
+            _folderCompleted.TryAdd(f, 0);
+        }
 
         foreach (var (folder, file) in fileList)
         {
             if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
             await OnFileChanged(folder, file, ct);
             _syncCompleted++;
+            if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
         }
 
         _isSyncing = false;
@@ -454,11 +471,20 @@ public class BackupService : BackgroundService
         _isSyncing = true;
         _syncTotal = fileList.Count;
         _syncCompleted = 0;
+        _folderTotal.Clear();
+        _folderCompleted.Clear();
+        foreach (var (f, _) in fileList)
+        {
+            if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;
+            _folderTotal[f]++;
+            _folderCompleted.TryAdd(f, 0);
+        }
         foreach (var (folder, file) in fileList)
         {
             if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
             await OnFileChanged(folder, file, ct);
             _syncCompleted++;
+            if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
         }
         _isSyncing = false;
         LogSystem(0, $"Sincronización manual completada: {_syncCompleted} archivos.");
@@ -534,12 +560,21 @@ public class BackupService : BackgroundService
                 _isSyncing = true;
                 _syncTotal = fileList.Count;
                 _syncCompleted = 0;
+                _folderTotal.Clear();
+                _folderCompleted.Clear();
+                foreach (var (f, _) in fileList)
+                {
+                    if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;
+                    _folderTotal[f]++;
+                    _folderCompleted.TryAdd(f, 0);
+                }
 
                 foreach (var (folder, file) in fileList)
                 {
                     if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
                     await OnFileChanged(folder, file, ct);
                     _syncCompleted++;
+                    if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
                 }
 
                 _isSyncing = false;

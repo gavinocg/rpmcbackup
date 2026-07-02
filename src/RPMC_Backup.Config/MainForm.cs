@@ -40,6 +40,7 @@ public class MainForm : Form
     private TextBox _txtSmtpHost, _txtSmtpPort, _txtSmtpUser, _txtSmtpPass, _txtSmtpFrom, _txtAdminEmailConfig;
     private CheckBox _chkSmtpSsl;
     private Button _btnSaveSmtp, _btnTestEmail;
+    private FlowLayoutPanel _foldersProgressPanel;
 
     public MainForm()
     {
@@ -109,9 +110,12 @@ public class MainForm : Form
         };
         using var bmp = new Bitmap(16, 16);
         using var g = Graphics.FromImage(bmp);
-        g.Clear(color);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+        g.FillEllipse(new SolidBrush(color), 1, 1, 14, 14);
         var hIcon = bmp.GetHicon();
-        _trayIcon.Icon = Icon.FromHandle(hIcon);
+        using var temp = Icon.FromHandle(hIcon);
+        _trayIcon.Icon = (Icon)temp.Clone();
     }
 
     private void CreateTabControl()
@@ -278,7 +282,11 @@ public class MainForm : Form
         btnSaveOrig.Top = _tabFolders.Height - btnSaveOrig.Height - 15;
         btnSaveOrig.Click += (s, e) => { if (!PromptAdminPassword("Guardar origenes")) return; SendIpc(Constants.CmdReconfig); MessageBox.Show("Configuración de origenes guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information); };
 
-        _tabFolders.Controls.AddRange(new Control[] { lblTree, treeFolders, _foldersList, txtFolderPath, _btnAddFolder, _btnRemoveFolder, btnSaveOrig });
+        var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(840, 120), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
+        _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(820, 90), AutoScroll = true, Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom };
+        progGroup.Controls.Add(_foldersProgressPanel);
+
+        _tabFolders.Controls.AddRange(new Control[] { lblTree, treeFolders, _foldersList, txtFolderPath, _btnAddFolder, _btnRemoveFolder, progGroup, btnSaveOrig });
     }
 
     private void PopulateDriveNodes(TreeView tree)
@@ -817,8 +825,17 @@ public class MainForm : Form
             Invoke(() => UpdateStatusUI(captured));
     }
 
-    private System.Windows.Forms.Timer? _flashTimer;
-    private bool _flashState;
+    private void DrawPlayIcon()
+    {
+        using var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+        g.FillPolygon(new SolidBrush(Color.Green), new[] { new PointF(3, 2), new PointF(3, 14), new PointF(14, 8) });
+        var hIcon = bmp.GetHicon();
+        using var temp = Icon.FromHandle(hIcon);
+        _trayIcon.Icon = (Icon)temp.Clone();
+    }
     private string _lastDataError = string.Empty;
     private string _lastConnectionError = string.Empty;
     private bool _lastDegraded;
@@ -837,7 +854,7 @@ public class MainForm : Form
 
         var statusText = state.Status switch
         {
-            ServiceStatus.Running => state.IsSyncing ? $"Sincronizando [{state.SyncProgress}%]" : "Ejecutando",
+            ServiceStatus.Running => state.IsSyncing ? "Sincronizando" : "Ejecutando",
             ServiceStatus.Paused => "Pausado",
             ServiceStatus.Degraded => "Atención",
             ServiceStatus.Error => "Error",
@@ -856,13 +873,15 @@ public class MainForm : Form
 
         _trayIcon.Text = state.Status switch
         {
-            ServiceStatus.Running => state.IsSyncing ? $"RPMC Backup - Sync ({state.SyncProgress}%)" : "RPMC Backup - Listo",
+            ServiceStatus.Running => state.IsSyncing ? "RPMC Backup - Sincronizando" : "RPMC Backup - Listo",
             ServiceStatus.Paused => "RPMC Backup - Pausado",
             ServiceStatus.Degraded => "RPMC Backup - Requiere atención",
             ServiceStatus.Error => "RPMC Backup - Error",
             ServiceStatus.Stopped => "RPMC Backup - Detenido",
             _ => "RPMC Backup"
         };
+
+        UpdateFoldersProgress(state);
 
         if (!string.IsNullOrEmpty(state.DataError) && state.DataError != _lastDataError)
         {
@@ -921,27 +940,10 @@ public class MainForm : Form
 
         if (state.IsSyncing)
         {
-            if (_flashTimer == null)
-            {
-                _flashTimer = new System.Windows.Forms.Timer { Interval = 500 };
-                _flashTimer.Tick += (s, ev) =>
-                {
-                    _flashState = !_flashState;
-                    var c = _flashState ? color : Color.Transparent;
-                    using var bmp = new Bitmap(16, 16);
-                    using var g = Graphics.FromImage(bmp);
-                    g.Clear(c);
-                    var hIcon = bmp.GetHicon();
-                    _trayIcon.Icon = Icon.FromHandle(hIcon);
-                };
-                _flashTimer.Start();
-            }
+            DrawPlayIcon();
         }
         else
         {
-            _flashTimer?.Stop();
-            _flashTimer?.Dispose();
-            _flashTimer = null;
             SetTrayIcon(state.Status);
         }
     }
@@ -959,6 +961,26 @@ public class MainForm : Form
                 _foldersList.Items.Add(item);
             }
             _foldersList.Invalidate();
+        }
+    }
+
+    private void UpdateFoldersProgress(ServiceStateInfo state)
+    {
+        if (_foldersProgressPanel == null) return;
+        _foldersProgressPanel.Controls.Clear();
+        if (state == null || state.FoldersProgress == null || state.FoldersProgress.Count == 0)
+            return;
+        foreach (var fp in state.FoldersProgress)
+        {
+            var folderName = Path.GetFileName(fp.Folder.TrimEnd('\\', '/'));
+            if (string.IsNullOrEmpty(folderName)) folderName = fp.Folder;
+            var pct = fp.Total > 0 ? Math.Min(100 * fp.Completed / fp.Total, 100) : 0;
+            var pnl = new Panel { Width = _foldersProgressPanel.Width - 20, Height = 28, Margin = new Padding(0, 0, 0, 2) };
+            var lbl = new Label { Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)", Location = new Point(0, 0), AutoSize = true };
+            var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = pnl.Width, Height = 12, Style = ProgressBarStyle.Continuous };
+            pnl.Controls.Add(lbl);
+            pnl.Controls.Add(bar);
+            _foldersProgressPanel.Controls.Add(pnl);
         }
     }
 
