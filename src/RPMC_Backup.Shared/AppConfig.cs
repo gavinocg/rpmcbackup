@@ -25,7 +25,7 @@ public class AppConfig
     [JsonPropertyName("sync_interval_unit")] public string SyncIntervalUnit { get; set; } = "minutos";
     [JsonPropertyName("force_sync")] public bool ForceSync { get; set; }
     [JsonPropertyName("excluded_files")] public List<string> ExcludedFiles { get; set; } = new();
-    [JsonPropertyName("s3_region")] public string S3Region { get; set; } = "ec-pichincha-cay1";
+    [JsonPropertyName("s3_region")] public string S3Region { get; set; } = "us-east-1";
 }
 
 public class FolderConfig
