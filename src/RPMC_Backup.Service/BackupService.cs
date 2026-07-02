@@ -228,7 +228,10 @@ public class BackupService : BackgroundService
 
             _isVerifying = false;
 
-            var files = Directory.GetFiles(folder.Path, "*", folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+            var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            _logger.LogInformation($"Scanning {folder.Path} (Recursive={folder.Recursive}, SearchOption={searchOpt})");
+            var files = Directory.GetFiles(folder.Path, "*", searchOpt);
+            _logger.LogInformation($"Found {files.Length} files in {folder.Path}");
             var folderFiles = new List<string>();
             foreach (var file in files)
             {
