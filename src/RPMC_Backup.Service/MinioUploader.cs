@@ -110,9 +110,9 @@ public class MinioUploader
             await _client.MakeBucketAsync(new MakeBucketArgs().WithBucket(_bucket));
     }
 
-    public async Task<DateTime?> GetNewestObjectTimestampAsync(string prefix, CancellationToken ct)
+    public async Task<Dictionary<string, DateTime>> ListExistingObjectsAsync(string prefix, CancellationToken ct)
     {
-        DateTime? newest = null;
+        var result = new Dictionary<string, DateTime>();
         var args = new ListObjectsArgs()
             .WithBucket(_bucket)
             .WithPrefix(prefix)
@@ -121,10 +121,10 @@ public class MinioUploader
         await foreach (var item in items)
         {
             var ts = item.LastModifiedDateTime;
-            if (ts.HasValue && ts.Value > (newest ?? DateTime.MinValue))
-                newest = ts.Value;
+            if (ts.HasValue)
+                result[item.Key] = ts.Value;
         }
-        return newest;
+        return result;
     }
 
     private static byte[] GetSigningKey(string secretKey, string dateStamp, string region, string service)

@@ -282,8 +282,8 @@ public class MainForm : Form
         btnSaveOrig.Top = _tabFolders.Height - btnSaveOrig.Height - 15;
         btnSaveOrig.Click += (s, e) => { if (!PromptAdminPassword("Guardar origenes")) return; SendIpc(Constants.CmdReconfig); MessageBox.Show("Configuración de origenes guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information); };
 
-        var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(840, 120), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
-        _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(820, 90), AutoScroll = true, Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom };
+        var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(820, 120), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
+        _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(800, 90), AutoScroll = true, Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom };
         progGroup.Controls.Add(_foldersProgressPanel);
 
         _tabFolders.Controls.AddRange(new Control[] { lblTree, treeFolders, _foldersList, txtFolderPath, _btnAddFolder, _btnRemoveFolder, progGroup, btnSaveOrig });
@@ -970,7 +970,7 @@ public class MainForm : Form
         _foldersProgressPanel.Controls.Clear();
         if (state == null || state.FoldersProgress == null || state.FoldersProgress.Count == 0)
             return;
-        var barWidth = _foldersProgressPanel.ClientSize.Width - 16;
+        var barWidth = _foldersProgressPanel.ClientSize.Width - 20;
         foreach (var fp in state.FoldersProgress)
         {
             var folderName = Path.GetFileName(fp.Folder.TrimEnd('\\', '/'));

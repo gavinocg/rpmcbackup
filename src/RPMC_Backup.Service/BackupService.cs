@@ -195,16 +195,17 @@ public class BackupService : BackgroundService
     {
         _logger.LogInformation("Initial full sync started...");
 
+        Dictionary<string, DateTime>? existing = null;
         if (_lastSyncTime <= DateTime.MinValue)
         {
             try
             {
                 var prefix = $"{config.MachineName}/{config.MachineUserName}/";
-                var newest = await _uploader.GetNewestObjectTimestampAsync(prefix, ct);
-                if (newest.HasValue)
+                existing = await _uploader.ListExistingObjectsAsync(prefix, ct);
+                if (existing.Count > 0)
                 {
-                    _lastSyncTime = newest.Value;
-                    _logger.LogInformation($"Bucket data detected. Using differential cutoff: {_lastSyncTime:yyyy-MM-dd HH:mm:ss}");
+                    _lastSyncTime = existing.Values.Max();
+                    _logger.LogInformation($"Bucket data detected: {existing.Count} objects. Using differential sync.");
                 }
             }
             catch (Exception ex)
@@ -214,7 +215,6 @@ public class BackupService : BackgroundService
         }
 
         var fileList = new List<(string folder, string file)>();
-        var cutoff = _lastSyncTime > DateTime.MinValue ? _lastSyncTime : DateTime.MinValue;
         foreach (var folder in config.Folders ?? new())
         {
             if (!Directory.Exists(folder.Path)) continue;
@@ -223,7 +223,18 @@ public class BackupService : BackgroundService
             {
                 var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
                 if (shouldExclude) continue;
-                if (cutoff > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
+                if (existing != null && existing.Count > 0)
+                {
+                    var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
+                    var relPath = file.Substring(folder.Path.Length).TrimStart('\\', '/').Replace('\\', '/');
+                    var s3Key = $"{config.MachineName}/{config.MachineUserName}/{folderName}/{relPath}";
+                    if (existing.TryGetValue(s3Key, out var bucketTs))
+                    {
+                        var localTs = File.GetLastWriteTimeUtc(file);
+                        if (localTs <= bucketTs)
+                            continue;
+                    }
+                }
                 fileList.Add((folder.Path, file));
             }
         }
