@@ -10,7 +10,6 @@ namespace RPMC_Backup.Service;
 
 public class MinioUploader
 {
-    private const string S3Region = "ec-pichincha-cay1";
     private const string S3Service = "s3";
     private const string UnsignedPayload = "UNSIGNED-PAYLOAD";
 
@@ -19,6 +18,7 @@ public class MinioUploader
     private readonly string _endpoint;
     private readonly string _accessKey;
     private readonly string _secretKey;
+    private readonly string _region;
     private readonly bool _useSsl;
     private readonly SemaphoreSlim _semaphore = new(5, 5);
     private static readonly HttpClient _http = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
@@ -30,6 +30,7 @@ public class MinioUploader
         _accessKey = config.MinioAccessKey;
         _secretKey = config.MinioSecretKey;
         _useSsl = config.MinioUseSsl;
+        _region = string.IsNullOrEmpty(config.S3Region) ? "us-east-1" : config.S3Region;
 
         _client = new MinioClient()
             .WithEndpoint(config.MinioEndpoint)
@@ -71,10 +72,10 @@ public class MinioUploader
 
             var canonicalRequest = $"PUT\n{canonicalUri}\n{canonicalQuery}\n{canonicalHeaders}\n{signedHeaders}\n{UnsignedPayload}";
 
-            var credentialScope = $"{dateStamp}/{S3Region}/{S3Service}/aws4_request";
+            var credentialScope = $"{dateStamp}/{_region}/{S3Service}/aws4_request";
             var stringToSign = $"AWS4-HMAC-SHA256\n{amzDate}\n{credentialScope}\n{Hex(SHA256(Encoding.UTF8.GetBytes(canonicalRequest)))}";
 
-            var signingKey = GetSigningKey(_secretKey, dateStamp, S3Region, S3Service);
+            var signingKey = GetSigningKey(_secretKey, dateStamp, _region, S3Service);
             var signature = Hex(HMAC(signingKey, Encoding.UTF8.GetBytes(stringToSign)));
 
             var authorization = $"AWS4-HMAC-SHA256 Credential={_accessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";

@@ -29,7 +29,7 @@ public class MainForm : Form
     private Panel _statusIndicator;
     private bool _closingToTray = true;
     private ToolStripMenuItem _trayToggleItem;
-    private TextBox _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _txtConnMachineName;
+    private TextBox _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _txtConnMachineName, _txtConnRegion;
     private ComboBox _cmbConnBucket;
     private NumericUpDown _numSyncInterval;
     private ComboBox _cmbSyncUnit;
@@ -144,20 +144,22 @@ public class MainForm : Form
         _btnResume.Click += (s, e) => { SendIpc(Constants.CmdResume); RefreshStatus(); };
         statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblErrors, _btnStop, _btnPause, _btnResume });
 
-        var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 240) };
+        var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 270) };
         var lblEp = new Label { Text = "Endpoint:", Location = new Point(15, 25), AutoSize = true };
         var lblAk = new Label { Text = "Access Key:", Location = new Point(15, 55), AutoSize = true };
         var lblSk = new Label { Text = "Secret Key:", Location = new Point(15, 85), AutoSize = true };
         var lblBk = new Label { Text = "Bucket:", Location = new Point(15, 115), AutoSize = true };
-        var lblMc = new Label { Text = "Equipo:", Location = new Point(15, 145), AutoSize = true };
+        var lblRg = new Label { Text = "Región:", Location = new Point(15, 145), AutoSize = true };
+        var lblMc = new Label { Text = "Equipo:", Location = new Point(15, 175), AutoSize = true };
         _txtConnEndpoint = new TextBox { Location = new Point(120, 22), Width = 400 };
         _txtConnAccessKey = new TextBox { Location = new Point(120, 52), Width = 400 };
         _txtConnSecretKey = new TextBox { Location = new Point(120, 82), Width = 400, UseSystemPasswordChar = true };
         _cmbConnBucket = new ComboBox { Location = new Point(120, 112), Width = 400, DropDownStyle = ComboBoxStyle.DropDown };
-        _txtConnMachineName = new TextBox { Location = new Point(120, 142), Width = 400 };
-        _chkConnSsl = new CheckBox { Text = "Usar SSL (HTTPS)", Location = new Point(120, 172), AutoSize = true };
-        _btnConnTest = new Button { Location = new Point(120, 195), Size = new Size(130, 28), Text = "Probar Conexión" };
-        _lblConnResult = new Label { Location = new Point(260, 200), AutoSize = true };
+        _txtConnRegion = new TextBox { Location = new Point(120, 142), Width = 400 };
+        _txtConnMachineName = new TextBox { Location = new Point(120, 172), Width = 400, ReadOnly = true };
+        _chkConnSsl = new CheckBox { Text = "Usar SSL (HTTPS)", Location = new Point(120, 200), AutoSize = true };
+        _btnConnTest = new Button { Location = new Point(120, 225), Size = new Size(130, 28), Text = "Probar Conexión" };
+        _lblConnResult = new Label { Location = new Point(260, 230), AutoSize = true };
         _btnConnTest.Click += async (s, e) =>
         {
             _btnConnTest.Enabled = false;
@@ -188,8 +190,8 @@ public class MainForm : Form
             }
             _btnConnTest.Enabled = true;
         };
-        groupInfo.Controls.AddRange(new Control[] { lblEp, lblAk, lblSk, lblBk, lblMc,
-            _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _cmbConnBucket, _txtConnMachineName,
+        groupInfo.Controls.AddRange(new Control[] { lblEp, lblAk, lblSk, lblBk, lblRg, lblMc,
+            _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _cmbConnBucket, _txtConnRegion, _txtConnMachineName,
             _chkConnSsl, _btnConnTest, _lblConnResult
         });
 
@@ -207,6 +209,7 @@ public class MainForm : Form
             cfg.MinioUseSsl = _chkConnSsl.Checked;
             cfg.BucketName = _cmbConnBucket.Text;
             cfg.MachineName = _txtConnMachineName.Text;
+            cfg.S3Region = _txtConnRegion.Text;
             SaveConfig(cfg);
             SendIpc(Constants.CmdReconfig);
             MessageBox.Show("Configuración guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -675,6 +678,7 @@ public class MainForm : Form
         _chkConnSsl.Checked = cfg.MinioUseSsl;
         _cmbConnBucket.Text = cfg.BucketName;
         _txtConnMachineName.Text = cfg.MachineName;
+        _txtConnRegion.Text = cfg.S3Region;
     }
 
     private void LoadSmtpConfig()
