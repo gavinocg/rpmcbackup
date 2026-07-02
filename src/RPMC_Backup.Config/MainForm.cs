@@ -837,13 +837,27 @@ public class MainForm : Form
         using var temp = Icon.FromHandle(hIcon);
         _trayIcon.Icon = (Icon)temp.Clone();
     }
+
+    private void DrawVerifyingIcon()
+    {
+        using var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+        g.FillEllipse(new SolidBrush(Color.DodgerBlue), 1, 1, 14, 14);
+        using var font = new Font("Segoe UI", 9, FontStyle.Bold);
+        g.DrawString("?", font, Brushes.White, 3, 0);
+        var hIcon = bmp.GetHicon();
+        using var temp = Icon.FromHandle(hIcon);
+        _trayIcon.Icon = (Icon)temp.Clone();
+    }
     private string _lastDataError = string.Empty;
     private string _lastConnectionError = string.Empty;
     private bool _lastDegraded;
 
     private void UpdateStatusUI(ServiceStateInfo state)
     {
-        var color = state.Status switch
+        var color = state.IsVerifying ? Color.DodgerBlue : state.Status switch
         {
             ServiceStatus.Running => Color.Green,
             ServiceStatus.Paused or ServiceStatus.Degraded => Color.Orange,
@@ -851,9 +865,15 @@ public class MainForm : Form
             _ => Color.Gray
         };
         _statusIndicator.BackColor = color;
-        SetTrayIcon(state.Status);
 
-        var statusText = state.Status switch
+        if (state.IsVerifying)
+            DrawVerifyingIcon();
+        else if (state.IsSyncing)
+            DrawPlayIcon();
+        else
+            SetTrayIcon(state.Status);
+
+        var statusText = state.IsVerifying ? "Verificando destino..." : state.Status switch
         {
             ServiceStatus.Running => state.IsSyncing ? "Sincronizando" : "Ejecutando",
             ServiceStatus.Paused => "Pausado",
@@ -867,12 +887,12 @@ public class MainForm : Form
         _lblErrors.Text = state.Errors24h >= 0 ? $"Errores (24h): {state.Errors24h}" : "Servicio no disponible";
         _lblPending.Text = $"Archivos encolados: {state.PendingFiles} | Total: {FormatBytes(state.TotalBytesUploaded)} ({state.TotalFilesUploaded} archivos)";
 
-        _btnStop.Enabled = state.Status == ServiceStatus.Running;
-        _btnPause.Enabled = state.Status == ServiceStatus.Running;
-        _btnResume.Enabled = state.Status is ServiceStatus.Paused or ServiceStatus.Stopped or ServiceStatus.Degraded;
+        _btnStop.Enabled = state.Status == ServiceStatus.Running && !state.IsVerifying;
+        _btnPause.Enabled = state.Status == ServiceStatus.Running && !state.IsVerifying;
+        _btnResume.Enabled = state.Status is ServiceStatus.Stopped or ServiceStatus.Paused or ServiceStatus.Degraded;
         _trayToggleItem.Text = state.Status is ServiceStatus.Stopped or ServiceStatus.Paused ? "Iniciar servicio" : "Detener servicio";
 
-        _trayIcon.Text = state.Status switch
+        _trayIcon.Text = state.IsVerifying ? "RPMC Backup - Verificando destino..." : state.Status switch
         {
             ServiceStatus.Running => state.IsSyncing ? "RPMC Backup - Sincronizando" : "RPMC Backup - Listo",
             ServiceStatus.Paused => "RPMC Backup - Pausado",
@@ -881,6 +901,7 @@ public class MainForm : Form
             ServiceStatus.Stopped => "RPMC Backup - Detenido",
             _ => "RPMC Backup"
         };
+
 
         UpdateFoldersProgress(state);
 

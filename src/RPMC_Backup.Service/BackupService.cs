@@ -23,6 +23,7 @@ public class BackupService : BackgroundService
     private DateTime _lastSyncTime = DateTime.MinValue;
     private readonly Queue<string> _retryQueue = new();
     private volatile bool _isSyncing;
+    private volatile bool _isVerifying;
     private int _syncTotal;
     private int _syncCompleted;
     private bool _initialSyncDone;
@@ -44,6 +45,7 @@ public class BackupService : BackgroundService
             TotalBytesUploaded = _totalBytes,
             TotalFilesUploaded = _totalFiles,
             IsSyncing = _isSyncing,
+            IsVerifying = _isVerifying,
             SyncProgress = _syncTotal > 0 ? Math.Min((int)(100.0 * _syncCompleted / _syncTotal), 100) : (_isSyncing ? 0 : 100),
             DataError = _dataError,
             ConnectionError = _connectionError,
@@ -193,43 +195,49 @@ public class BackupService : BackgroundService
 
     private async Task RunInitialFullSync(AppConfig config, CancellationToken ct)
     {
-        _logger.LogInformation("Initial full sync started...");
+        _logger.LogInformation("Initial sync started...");
+        var prefix = $"{config.MachineName}/{config.MachineUserName}/";
+        var allExisting = new Dictionary<string, DateTime>();
+        var totalProcessed = 0;
+        var totalFolders = config.Folders?.Count ?? 0;
+        var processedFolders = 0;
 
-        Dictionary<string, DateTime>? existing = null;
-        if (_lastSyncTime <= DateTime.MinValue)
-        {
-            try
-            {
-                var prefix = $"{config.MachineName}/{config.MachineUserName}/";
-                _logger.LogInformation($"Checking bucket for existing data with prefix: {prefix}");
-                existing = await _uploader.ListExistingObjectsAsync(prefix, ct);
-                _logger.LogInformation($"Bucket check complete. Found {existing.Count} existing objects.");
-                if (existing.Count > 0)
-                {
-                    _lastSyncTime = existing.Values.Max();
-                    _logger.LogInformation($"Bucket data detected: {existing.Count} objects, newest: {_lastSyncTime:yyyy-MM-dd HH:mm:ss}. Using differential sync.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning($"Could not check bucket for existing data: {ex.Message}. Proceeding with full sync.");
-            }
-        }
-
-        var fileList = new List<(string folder, string file)>();
         foreach (var folder in config.Folders ?? new())
         {
             if (!Directory.Exists(folder.Path)) continue;
+            var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
+            processedFolders++;
+            LogSystem(0, $"Procesando origen ({processedFolders}/{totalFolders}): {folderName}");
+
+            _isVerifying = true;
+            Dictionary<string, DateTime>? existing = null;
+            try
+            {
+                var folderPrefix = $"{prefix}{folderName}/";
+                _logger.LogInformation($"Verifying destination for {folderName} with prefix: {folderPrefix}");
+                var folderObjects = await _uploader.ListExistingObjectsAsync(folderPrefix, ct);
+                existing = folderObjects.Count > 0 ? folderObjects : null;
+                foreach (var kv in folderObjects)
+                    allExisting[kv.Key] = kv.Value;
+                _logger.LogInformation($"Destination check for {folderName}: {(existing != null ? $"{folderObjects.Count} objects found (differential)" : "empty (full sync)")}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Could not verify destination for {folderName}: {ex.Message}. Proceeding with full sync.");
+            }
+
+            _isVerifying = false;
+
             var files = Directory.GetFiles(folder.Path, "*", folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+            var folderFiles = new List<string>();
             foreach (var file in files)
             {
                 var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
                 if (shouldExclude) continue;
-                if (existing != null && existing.Count > 0)
+                if (existing != null)
                 {
-                    var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
                     var relPath = file.Substring(folder.Path.Length).TrimStart('\\', '/').Replace('\\', '/');
-                    var s3Key = $"{config.MachineName}/{config.MachineUserName}/{folderName}/{relPath}";
+                    var s3Key = $"{prefix}{folderName}/{relPath}";
                     if (existing.TryGetValue(s3Key, out var bucketTs))
                     {
                         var localTs = File.GetLastWriteTimeUtc(file);
@@ -237,34 +245,41 @@ public class BackupService : BackgroundService
                             continue;
                     }
                 }
-                fileList.Add((folder.Path, file));
+                folderFiles.Add(file);
             }
-        }
-        if (fileList.Count == 0) { _logger.LogInformation("Initial full sync: no files to sync."); return; }
 
-        _isSyncing = true;
-        _syncTotal = fileList.Count;
-        _syncCompleted = 0;
-        _folderTotal.Clear();
-        _folderCompleted.Clear();
-        foreach (var (f, _) in fileList)
-        {
-            if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;
-            _folderTotal[f]++;
-            _folderCompleted.TryAdd(f, 0);
+            if (folderFiles.Count == 0)
+            {
+                LogSystem(0, $"Origen {folderName}: sin archivos pendientes.");
+                _logger.LogInformation($"Folder {folderName}: no files to sync.");
+                continue;
+            }
+
+            _isSyncing = true;
+            _syncTotal = folderFiles.Count;
+            _syncCompleted = 0;
+            _folderTotal.Clear();
+            _folderCompleted.Clear();
+            _folderTotal[folder.Path] = folderFiles.Count;
+            _folderCompleted[folder.Path] = 0;
+
+            foreach (var file in folderFiles)
+            {
+                if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
+                await OnFileChanged(folder.Path, file, ct);
+                _syncCompleted++;
+                _folderCompleted[folder.Path] = _syncCompleted;
+                totalProcessed++;
+            }
+
+            _isSyncing = false;
+            LogSystem(0, $"Origen {folderName}: {folderFiles.Count} archivos sincronizados.");
+            _logger.LogInformation($"Folder {folderName} sync completed: {folderFiles.Count} files.");
         }
 
-        foreach (var (folder, file) in fileList)
-        {
-            if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
-            await OnFileChanged(folder, file, ct);
-            _syncCompleted++;
-            if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
-        }
-
-        _isSyncing = false;
-        LogSystem(0, $"Sincronización inicial completada: {_syncCompleted} archivos.");
-        _logger.LogInformation($"Initial full sync completed: {_syncCompleted}/{fileList.Count} files.");
+        var mode = allExisting.Count > 0 ? "diferencial" : "full";
+        LogSystem(0, $"Sincronización inicial completada: {totalProcessed} archivos en {totalFolders} orígenes (modo {mode}).");
+        _logger.LogInformation($"Initial sync completed: {totalProcessed} files across {totalFolders} folders ({mode}).");
     }
 
     private void LogSystem(int level, string message)

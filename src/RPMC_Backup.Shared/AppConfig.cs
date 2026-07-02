@@ -54,6 +54,7 @@ public class ServiceStateInfo
     public long TotalBytesUploaded { get; set; }
     public int TotalFilesUploaded { get; set; }
     public bool IsSyncing { get; set; }
+    public bool IsVerifying { get; set; }
     public int SyncProgress { get; set; }
     public string DataError { get; set; } = string.Empty;
     public string ConnectionError { get; set; } = string.Empty;
