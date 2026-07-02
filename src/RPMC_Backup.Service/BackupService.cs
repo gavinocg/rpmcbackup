@@ -197,28 +197,34 @@ public class BackupService : BackgroundService
     {
         _logger.LogInformation("Initial sync started...");
         var prefix = $"{config.MachineName}/{config.MachineUserName}/";
-        var allExisting = new Dictionary<string, DateTime>();
-        var totalProcessed = 0;
         var totalFolders = config.Folders?.Count ?? 0;
-        var processedFolders = 0;
+        var totalProcessed = 0;
+        var folderFileMap = new Dictionary<string, List<string>>();
 
+        // Phase 1: Verify all folders against bucket
+        _isVerifying = true;
+        _logger.LogInformation("Phase 1: Verifying destination for all folders...");
+        var folderExistingMap = new Dictionary<string, Dictionary<string, DateTime>?>();
         foreach (var folder in config.Folders ?? new())
         {
             if (!Directory.Exists(folder.Path)) continue;
             var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
-            processedFolders++;
-            LogSystem(0, $"Procesando origen ({processedFolders}/{totalFolders}): {folderName}");
+            LogSystem(0, $"Verificando destino: {folderName}");
 
-            _isVerifying = true;
+            var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            _logger.LogInformation($"Scanning {folder.Path} (Recursive={folder.Recursive})");
+            var files = Directory.GetFiles(folder.Path, "*", searchOpt).Where(f =>
+                !folder.ExcludePatterns.Any(p => Path.GetExtension(f).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase))).ToList();
+            _logger.LogInformation($"Found {files.Count} files in {folder.Path}");
+
             Dictionary<string, DateTime>? existing = null;
             try
             {
                 var folderPrefix = $"{prefix}{folderName}/";
                 _logger.LogInformation($"Verifying destination for {folderName} with prefix: {folderPrefix}");
                 var folderObjects = await _uploader.ListExistingObjectsAsync(folderPrefix, ct);
-                existing = folderObjects.Count > 0 ? folderObjects : null;
-                foreach (var kv in folderObjects)
-                    allExisting[kv.Key] = kv.Value;
+                if (folderObjects.Count > 0)
+                    existing = folderObjects;
                 _logger.LogInformation($"Destination check for {folderName}: {(existing != null ? $"{folderObjects.Count} objects found (differential)" : "empty (full sync)")}");
             }
             catch (Exception ex)
@@ -226,17 +232,10 @@ public class BackupService : BackgroundService
                 _logger.LogWarning($"Could not verify destination for {folderName}: {ex.Message}. Proceeding with full sync.");
             }
 
-            _isVerifying = false;
-
-            var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            _logger.LogInformation($"Scanning {folder.Path} (Recursive={folder.Recursive}, SearchOption={searchOpt})");
-            var files = Directory.GetFiles(folder.Path, "*", searchOpt);
-            _logger.LogInformation($"Found {files.Length} files in {folder.Path}");
+            // Build filtered file list for this folder
             var folderFiles = new List<string>();
             foreach (var file in files)
             {
-                var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
-                if (shouldExclude) continue;
                 if (existing != null)
                 {
                     var relPath = file.Substring(folder.Path.Length).TrimStart('\\', '/').Replace('\\', '/');
@@ -251,38 +250,44 @@ public class BackupService : BackgroundService
                 folderFiles.Add(file);
             }
 
-            if (folderFiles.Count == 0)
-            {
-                LogSystem(0, $"Origen {folderName}: sin archivos pendientes.");
-                _logger.LogInformation($"Folder {folderName}: no files to sync.");
-                continue;
-            }
+            folderFileMap[folder.Path] = folderFiles;
+            LogSystem(0, $"Origen {folderName}: {folderFiles.Count} archivos pendientes.");
+        }
+
+        _isVerifying = false;
+
+        // Phase 2: Sync all folders
+        _logger.LogInformation("Phase 2: Syncing files...");
+        foreach (var kv in folderFileMap)
+        {
+            var folderPath = kv.Key;
+            var folderFiles = kv.Value;
+            var folderName = Path.GetFileName(folderPath.TrimEnd('\\', '/'));
+
+            if (folderFiles.Count == 0) continue;
 
             _isSyncing = true;
             _syncTotal = folderFiles.Count;
             _syncCompleted = 0;
             _folderTotal.Clear();
             _folderCompleted.Clear();
-            _folderTotal[folder.Path] = folderFiles.Count;
-            _folderCompleted[folder.Path] = 0;
+            _folderTotal[folderPath] = folderFiles.Count;
+            _folderCompleted[folderPath] = 0;
 
             foreach (var file in folderFiles)
             {
                 if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
-                await OnFileChanged(folder.Path, file, ct);
+                await OnFileChanged(folderPath, file, ct);
                 _syncCompleted++;
-                _folderCompleted[folder.Path] = _syncCompleted;
+                _folderCompleted[folderPath] = _syncCompleted;
                 totalProcessed++;
             }
 
             _isSyncing = false;
             LogSystem(0, $"Origen {folderName}: {folderFiles.Count} archivos sincronizados.");
-            _logger.LogInformation($"Folder {folderName} sync completed: {folderFiles.Count} files.");
         }
 
-        var mode = allExisting.Count > 0 ? "diferencial" : "full";
-        LogSystem(0, $"Sincronización inicial completada: {totalProcessed} archivos en {totalFolders} orígenes (modo {mode}).");
-        _logger.LogInformation($"Initial sync completed: {totalProcessed} files across {totalFolders} folders ({mode}).");
+        _logger.LogInformation($"Initial sync completed: {totalProcessed} files across {folderFileMap.Count} folders.");
     }
 
     private void LogSystem(int level, string message)
