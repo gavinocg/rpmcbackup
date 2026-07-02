@@ -110,6 +110,23 @@ public class MinioUploader
             await _client.MakeBucketAsync(new MakeBucketArgs().WithBucket(_bucket));
     }
 
+    public async Task<DateTime?> GetNewestObjectTimestampAsync(string prefix, CancellationToken ct)
+    {
+        DateTime? newest = null;
+        var args = new ListObjectsArgs()
+            .WithBucket(_bucket)
+            .WithPrefix(prefix)
+            .WithRecursive(true);
+        var items = _client.ListObjectsEnumAsync(args, ct);
+        await foreach (var item in items)
+        {
+            var ts = item.LastModifiedDateTime;
+            if (ts.HasValue && ts.Value > (newest ?? DateTime.MinValue))
+                newest = ts.Value;
+        }
+        return newest;
+    }
+
     private static byte[] GetSigningKey(string secretKey, string dateStamp, string region, string service)
     {
         var kDate = HMAC(Encoding.UTF8.GetBytes("AWS4" + secretKey), Encoding.UTF8.GetBytes(dateStamp));

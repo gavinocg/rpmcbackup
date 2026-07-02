@@ -970,14 +970,15 @@ public class MainForm : Form
         _foldersProgressPanel.Controls.Clear();
         if (state == null || state.FoldersProgress == null || state.FoldersProgress.Count == 0)
             return;
+        var barWidth = _foldersProgressPanel.ClientSize.Width - 16;
         foreach (var fp in state.FoldersProgress)
         {
             var folderName = Path.GetFileName(fp.Folder.TrimEnd('\\', '/'));
             if (string.IsNullOrEmpty(folderName)) folderName = fp.Folder;
             var pct = fp.Total > 0 ? Math.Min(100 * fp.Completed / fp.Total, 100) : 0;
-            var pnl = new Panel { Width = _foldersProgressPanel.Width - 20, Height = 28, Margin = new Padding(0, 0, 0, 2) };
+            var pnl = new Panel { Width = barWidth, Height = 28, Margin = new Padding(0, 0, 4, 2) };
             var lbl = new Label { Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)", Location = new Point(0, 0), AutoSize = true };
-            var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = pnl.Width, Height = 12, Style = ProgressBarStyle.Continuous };
+            var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = barWidth, Height = 12, Style = ProgressBarStyle.Continuous };
             pnl.Controls.Add(lbl);
             pnl.Controls.Add(bar);
             _foldersProgressPanel.Controls.Add(pnl);

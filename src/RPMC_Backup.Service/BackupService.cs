@@ -194,7 +194,27 @@ public class BackupService : BackgroundService
     private async Task RunInitialFullSync(AppConfig config, CancellationToken ct)
     {
         _logger.LogInformation("Initial full sync started...");
+
+        if (_lastSyncTime <= DateTime.MinValue)
+        {
+            try
+            {
+                var prefix = $"{config.MachineName}/{config.MachineUserName}/";
+                var newest = await _uploader.GetNewestObjectTimestampAsync(prefix, ct);
+                if (newest.HasValue)
+                {
+                    _lastSyncTime = newest.Value;
+                    _logger.LogInformation($"Bucket data detected. Using differential cutoff: {_lastSyncTime:yyyy-MM-dd HH:mm:ss}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Could not check bucket for existing data: {ex.Message}. Proceeding with full sync.");
+            }
+        }
+
         var fileList = new List<(string folder, string file)>();
+        var cutoff = _lastSyncTime > DateTime.MinValue ? _lastSyncTime : DateTime.MinValue;
         foreach (var folder in config.Folders ?? new())
         {
             if (!Directory.Exists(folder.Path)) continue;
@@ -203,6 +223,7 @@ public class BackupService : BackgroundService
             {
                 var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
                 if (shouldExclude) continue;
+                if (cutoff > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
                 fileList.Add((folder.Path, file));
             }
         }
