@@ -64,7 +64,7 @@ public class MainForm : Form
     private void CreateTrayIcon()
     {
         _trayMenu = new ContextMenuStrip();
-        _trayMenu.Items.Add("Abrir Configuración", null, (s, e) => { if (PromptAdminPassword("Abrir Configuración")) { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; } });
+        _trayMenu.Items.Add("Abrir Configuración", null, (s, e) => { if (PromptAdminPassword("Abrir Configuración", topMost: true)) { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; } });
         _trayToggleItem = new ToolStripMenuItem("Detener servicio");
         _trayToggleItem.Click += (s, e) => {
             if (_trayToggleItem.Text == "Detener servicio")
@@ -95,7 +95,7 @@ public class MainForm : Form
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
-        _trayIcon.DoubleClick += (s, e) => { if (PromptAdminPassword("Abrir Configuración")) { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; } };
+        _trayIcon.DoubleClick += (s, e) => { if (PromptAdminPassword("Abrir Configuración", topMost: true)) { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; } };
         SetTrayIcon(ServiceStatus.Unknown);
     }
 
@@ -512,7 +512,7 @@ public class MainForm : Form
         catch { }
     }
 
-    private bool PromptAdminPassword(string action)
+    private bool PromptAdminPassword(string action, bool topMost = false)
     {
         var config = LoadConfig();
         if (config == null || string.IsNullOrEmpty(config.AdminHash))
@@ -526,7 +526,8 @@ public class MainForm : Form
             StartPosition = FormStartPosition.CenterParent,
             MaximizeBox = false,
             MinimizeBox = false,
-            ShowInTaskbar = false
+            ShowInTaskbar = false,
+            TopMost = topMost
         };
         var lbl = new Label { Text = $"Ingrese clave de administrador para\n{action}:", Location = new Point(20, 20), AutoSize = true };
         var txt = new TextBox { Location = new Point(20, 55), Width = 320, UseSystemPasswordChar = true };
