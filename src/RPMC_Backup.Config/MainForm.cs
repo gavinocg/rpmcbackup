@@ -1007,13 +1007,13 @@ public class MainForm : Form
             {
                 var lbl = existingPnl.Controls[0] as Label;
                 var bar = existingPnl.Controls[1] as ProgressBar;
-                if (lbl != null) lbl.Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)";
+                if (lbl != null) lbl.Text = $"{folderName}: {pct}%";
                 if (bar != null) bar.Value = pct;
             }
             else
             {
                 var pnl = new Panel { Width = barWidth, Height = 28, Margin = new Padding(0, 0, 4, 2), Tag = fp.Folder };
-                var lbl = new Label { Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)", Location = new Point(0, 0), AutoSize = true };
+                var lbl = new Label { Text = $"{folderName}: {pct}%", Location = new Point(0, 0), AutoSize = true };
                 var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = barWidth, Height = 12, Style = ProgressBarStyle.Continuous };
                 pnl.Controls.Add(lbl);
                 pnl.Controls.Add(bar);
