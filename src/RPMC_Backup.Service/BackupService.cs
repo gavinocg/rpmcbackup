@@ -237,6 +237,7 @@ public class BackupService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning($"Could not verify destination for {folderName}: {ex.Message}. Proceeding with full sync.");
+                LogSystem(1, $"Error verificando destino {folderName}: {ex.Message}");
             }
 
             // Build filtered file list for this folder
