@@ -523,7 +523,7 @@ public class MainForm : Form
             Text = "RPMC Backup - Atención",
             Size = new Size(420, 180),
             FormBorderStyle = FormBorderStyle.FixedDialog,
-            StartPosition = FormStartPosition.CenterParent,
+            StartPosition = FormStartPosition.CenterScreen,
             MaximizeBox = false,
             MinimizeBox = false,
             ShowInTaskbar = false,
@@ -545,7 +545,28 @@ public class MainForm : Form
         };
         form.Controls.AddRange(new Control[] { lbl, chkDismiss, btnOk });
         form.AcceptButton = btnOk;
-        form.ShowDialog(this);
+        form.ShowDialog();
+    }
+
+    private void ShowErrorAlert()
+    {
+        using var form = new Form
+        {
+            Text = "RPMC Backup - Error",
+            Size = new Size(420, 150),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterScreen,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            TopMost = true
+        };
+        var lbl = new Label { Text = "El servicio RPMC Backup presenta un error persistente.\nRevise los logs del sistema.", Location = new Point(20, 20), AutoSize = true };
+        var btnOk = new Button { Text = "Aceptar", Location = new Point(160, 70), Size = new Size(100, 30) };
+        btnOk.Click += (s, ev) => form.Close();
+        form.Controls.AddRange(new Control[] { lbl, btnOk });
+        form.AcceptButton = btnOk;
+        form.ShowDialog();
     }
 
     private bool PromptAdminPassword(string action, bool topMost = false)
@@ -939,12 +960,11 @@ public class MainForm : Form
 
         UpdateFoldersProgress(state);
 
-        // Error state: persistent alerts every 1h
+        // Error state: persistent alerts every 15min
         if (state.Status == ServiceStatus.Error && !_errorAlertActive)
         {
             _errorAlertActive = true;
-            _errorAlertTimer = new System.Windows.Forms.Timer { Interval = 3600000 };
-            _errorAlertTimer.Tick += (s, ev) =>
+            void ErrorTick()
             {
                 var cfg = LoadConfig();
                 var machine = cfg?.MachineName ?? Environment.MachineName;
@@ -952,8 +972,11 @@ public class MainForm : Form
                 SendAlertEmail($"RPMC Backup - Error persistente {machine}/{user}",
                     $"El servicio RPMC Backup permanece en estado Error.\nEquipo: {machine}\nUsuario: {user}");
                 if (IsHandleCreated && !Disposing)
-                    Invoke(() => MessageBox.Show("El servicio RPMC Backup presenta un error persistente.\nRevise los logs del sistema.", "RPMC Backup - Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
-            };
+                    Invoke(() => ShowErrorAlert());
+            }
+            _errorAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
+            _errorAlertTimer.Tick += (s, ev) => ErrorTick();
+            ErrorTick(); // Fire immediately on transition
             _errorAlertTimer.Start();
         }
         if (state.Status != ServiceStatus.Error && _errorAlertActive)
@@ -968,8 +991,7 @@ public class MainForm : Form
         if (state.Status == ServiceStatus.Degraded && !_degradedAlertActive && !_dismissDegradedAlerts)
         {
             _degradedAlertActive = true;
-            _degradedAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
-            _degradedAlertTimer.Tick += (s, ev) =>
+            void DegradedTick()
             {
                 if (_dismissDegradedAlerts)
                 {
@@ -978,7 +1000,10 @@ public class MainForm : Form
                 }
                 if (IsHandleCreated && !Disposing)
                     Invoke(() => ShowDegradedAlert());
-            };
+            }
+            _degradedAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
+            _degradedAlertTimer.Tick += (s, ev) => DegradedTick();
+            DegradedTick(); // Fire immediately on transition
             _degradedAlertTimer.Start();
         }
         if (state.Status != ServiceStatus.Degraded)
