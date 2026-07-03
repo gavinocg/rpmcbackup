@@ -840,16 +840,20 @@ public class MainForm : Form
 
     private void DrawVerifyingIcon()
     {
-        using var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(Color.Transparent);
-        g.FillEllipse(new SolidBrush(Color.DodgerBlue), 1, 1, 14, 14);
-        using var font = new Font("Segoe UI", 9, FontStyle.Bold);
-        g.DrawString("?", font, Brushes.White, 3, 0);
-        var hIcon = bmp.GetHicon();
-        using var temp = Icon.FromHandle(hIcon);
-        _trayIcon.Icon = (Icon)temp.Clone();
+        try
+        {
+            using var bmp = new Bitmap(16, 16);
+            using var g = Graphics.FromImage(bmp);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            g.FillEllipse(new SolidBrush(Color.DodgerBlue), 1, 1, 14, 14);
+            g.FillEllipse(new SolidBrush(Color.White), 4, 4, 8, 8);
+            g.FillEllipse(new SolidBrush(Color.DodgerBlue), 6, 6, 4, 4);
+            var hIcon = bmp.GetHicon();
+            using var temp = Icon.FromHandle(hIcon);
+            _trayIcon.Icon = (Icon)temp.Clone();
+        }
+        catch { }
     }
     private string _lastDataError = string.Empty;
     private string _lastConnectionError = string.Empty;
