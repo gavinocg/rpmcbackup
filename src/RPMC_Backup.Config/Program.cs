@@ -2,6 +2,25 @@ using System.Diagnostics;
 using System.Security.Principal;
 using RPMC_Backup.Config;
 
+Application.ThreadException += (s, e) =>
+{
+    try
+    {
+        File.AppendAllText(Path.Combine(Path.GetTempPath(), "RPMC_Backup_Config_Error.log"),
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ThreadException: {e.Exception}\n");
+    }
+    catch { }
+};
+AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+{
+    try
+    {
+        File.AppendAllText(Path.Combine(Path.GetTempPath(), "RPMC_Backup_Config_Error.log"),
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UnhandledException: {e.ExceptionObject}\n");
+    }
+    catch { }
+};
+
 var cmdArgs = Environment.GetCommandLineArgs();
 
 if (cmdArgs.Length > 1 && cmdArgs[1] == "--start-service")

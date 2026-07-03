@@ -197,14 +197,21 @@ public class BackupService : BackgroundService
     {
         _logger.LogInformation("Initial sync started...");
         var prefix = $"{config.MachineName}/{config.MachineUserName}/";
-        var totalFolders = config.Folders?.Count ?? 0;
         var totalProcessed = 0;
         var folderFileMap = new Dictionary<string, List<string>>();
+
+        // Initialize progress for all configured folders
+        _folderTotal.Clear();
+        _folderCompleted.Clear();
+        foreach (var f in config.Folders ?? new())
+        {
+            _folderTotal[f.Path] = 0;
+            _folderCompleted[f.Path] = 0;
+        }
 
         // Phase 1: Verify all folders against bucket
         _isVerifying = true;
         _logger.LogInformation("Phase 1: Verifying destination for all folders...");
-        var folderExistingMap = new Dictionary<string, Dictionary<string, DateTime>?>();
         foreach (var folder in config.Folders ?? new())
         {
             if (!Directory.Exists(folder.Path)) continue;
@@ -251,6 +258,7 @@ public class BackupService : BackgroundService
             }
 
             folderFileMap[folder.Path] = folderFiles;
+            _folderTotal[folder.Path] = folderFiles.Count;
             LogSystem(0, $"Origen {folderName}: {folderFiles.Count} archivos pendientes.");
         }
 
@@ -269,10 +277,6 @@ public class BackupService : BackgroundService
             _isSyncing = true;
             _syncTotal = folderFiles.Count;
             _syncCompleted = 0;
-            _folderTotal.Clear();
-            _folderCompleted.Clear();
-            _folderTotal[folderPath] = folderFiles.Count;
-            _folderCompleted[folderPath] = 0;
 
             foreach (var file in folderFiles)
             {
@@ -530,6 +534,11 @@ public class BackupService : BackgroundService
         _syncCompleted = 0;
         _folderTotal.Clear();
         _folderCompleted.Clear();
+        foreach (var f in config.Folders ?? new())
+        {
+            _folderTotal[f.Path] = 0;
+            _folderCompleted[f.Path] = 0;
+        }
         foreach (var (f, _) in fileList)
         {
             if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;

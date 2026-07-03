@@ -989,21 +989,53 @@ public class MainForm : Form
     private void UpdateFoldersProgress(ServiceStateInfo state)
     {
         if (_foldersProgressPanel == null) return;
-        _foldersProgressPanel.Controls.Clear();
         if (state == null || state.FoldersProgress == null || state.FoldersProgress.Count == 0)
+        {
+            _foldersProgressPanel.Controls.Clear();
             return;
+        }
+
+        var seen = new HashSet<string>();
         var barWidth = _foldersProgressPanel.ClientSize.Width - 20;
+
         foreach (var fp in state.FoldersProgress)
         {
             var folderName = Path.GetFileName(fp.Folder.TrimEnd('\\', '/'));
             if (string.IsNullOrEmpty(folderName)) folderName = fp.Folder;
-            var pct = fp.Total > 0 ? Math.Min(100 * fp.Completed / fp.Total, 100) : 0;
-            var pnl = new Panel { Width = barWidth, Height = 28, Margin = new Padding(0, 0, 4, 2) };
-            var lbl = new Label { Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)", Location = new Point(0, 0), AutoSize = true };
-            var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = barWidth, Height = 12, Style = ProgressBarStyle.Continuous };
-            pnl.Controls.Add(lbl);
-            pnl.Controls.Add(bar);
-            _foldersProgressPanel.Controls.Add(pnl);
+            var pct = fp.Total > 0 ? Math.Min(100 * fp.Completed / fp.Total, 100) : 100;
+            seen.Add(fp.Folder);
+
+            // Find existing panel for this folder
+            Panel? existingPnl = null;
+            foreach (Control c in _foldersProgressPanel.Controls)
+            {
+                if (c is Panel p && p.Tag?.ToString() == fp.Folder)
+                { existingPnl = p; break; }
+            }
+
+            if (existingPnl != null)
+            {
+                var lbl = existingPnl.Controls[0] as Label;
+                var bar = existingPnl.Controls[1] as ProgressBar;
+                if (lbl != null) lbl.Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)";
+                if (bar != null) bar.Value = pct;
+            }
+            else
+            {
+                var pnl = new Panel { Width = barWidth, Height = 28, Margin = new Padding(0, 0, 4, 2), Tag = fp.Folder };
+                var lbl = new Label { Text = $"{folderName}: {fp.Completed}/{fp.Total} ({pct}%)", Location = new Point(0, 0), AutoSize = true };
+                var bar = new ProgressBar { Value = pct, Location = new Point(0, 16), Width = barWidth, Height = 12, Style = ProgressBarStyle.Continuous };
+                pnl.Controls.Add(lbl);
+                pnl.Controls.Add(bar);
+                _foldersProgressPanel.Controls.Add(pnl);
+            }
+        }
+
+        // Remove panels for folders no longer in state
+        for (int i = _foldersProgressPanel.Controls.Count - 1; i >= 0; i--)
+        {
+            if (_foldersProgressPanel.Controls[i] is Panel p && p.Tag != null && !seen.Contains(p.Tag.ToString()!))
+                _foldersProgressPanel.Controls.RemoveAt(i);
         }
     }
 
