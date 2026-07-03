@@ -655,12 +655,13 @@ public class MainForm : Form
     {
         if (!CheckConfigExists())
         {
-            ShowInTaskbar = false;
-            Hide();
             using var wizard = new InitWizardForm();
             wizard.StartPosition = FormStartPosition.CenterScreen;
+            wizard.TopMost = true;
             if (wizard.ShowDialog() == DialogResult.OK)
             {
+                ShowInTaskbar = false;
+                Hide();
                 _trayIcon.ShowBalloonTip(3000, "RPMC Backup", "Configuración inicial completada. La aplicacion se ejecuta en segundo plano.", ToolTipIcon.Info);
                 _statusTimer = new System.Windows.Forms.Timer { Interval = Constants.TrayPollIntervalMs };
                 _statusTimer.Tick += async (s, ev) => await Task.Run(() => RefreshStatus());
