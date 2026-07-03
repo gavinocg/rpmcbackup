@@ -164,7 +164,7 @@ public class BackupService : BackgroundService
 
                     if (_dataError.Length > 0 || _connectionError.Length > 0)
                         _status = ServiceStatus.Error;
-                    else if (_status == ServiceStatus.Error)
+                    else if (_status == ServiceStatus.Error || _status == ServiceStatus.Degraded)
                         _status = ServiceStatus.Running;
                 }
             }
@@ -453,7 +453,8 @@ public class BackupService : BackgroundService
 
     private async Task OnFileChanged(string folder, string filename, CancellationToken ct)
     {
-        if (_status != ServiceStatus.Running || _uploader == null) return;
+        if (_uploader == null) return;
+        if (_status != ServiceStatus.Running && _status != ServiceStatus.Degraded) return;
         var filePath = System.IO.Path.Combine(folder, filename);
         if (_excludedFiles.Contains(filePath)) return;
         if (!File.Exists(filePath)) return;
@@ -485,6 +486,11 @@ public class BackupService : BackgroundService
                 DurationMs = (int)sw.ElapsedMilliseconds,
                 Message = $"Uploaded {FormatBytes(bytes)} ({sw.ElapsedMilliseconds}ms)"
             });
+            if (_status == ServiceStatus.Degraded)
+            {
+                _status = ServiceStatus.Running;
+                LogSystem(0, "Servicio recuperado tras estado de Atención.");
+            }
         }
         catch (Exception ex)
         {
