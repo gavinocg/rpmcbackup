@@ -76,7 +76,9 @@ if (cmdArgs.Length > 1 && cmdArgs[1] == "--install-service")
 if (cmdArgs.Length > 1 && cmdArgs[1] == "--elevated")
 {
     ApplicationConfiguration.Initialize();
-    Application.Run(new MainForm());
+    var form = new MainForm();
+    form.WindowState = FormWindowState.Minimized;
+    Application.Run(form);
     return;
 }
 

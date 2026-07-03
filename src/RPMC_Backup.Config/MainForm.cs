@@ -691,7 +691,6 @@ public class MainForm : Form
         }
         else
         {
-            BeginInvoke(() => { ShowInTaskbar = false; Hide(); });
             try
             {
                 var psi = new ProcessStartInfo("sc", "start rpmc-backup-service")
