@@ -958,14 +958,6 @@ public class MainForm : Form
         if (state.Status != ServiceStatus.Degraded)
             _lastDegraded = false;
 
-        if (state.IsSyncing)
-        {
-            DrawPlayIcon();
-        }
-        else
-        {
-            SetTrayIcon(state.Status);
-        }
     }
 
     private void RefreshFolders()
