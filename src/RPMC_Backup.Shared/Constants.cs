@@ -16,7 +16,7 @@ public static class Constants
     public const int WatchdogIntervalMs = 10000;
     public const int MaxStopAttempts = 3;
     public const int StopLockoutMinutes = 5;
-    public const int TrayPollIntervalMs = 10000;
+    public const int TrayPollIntervalMs = 3000;
     public const int PipeConnectTimeoutMs = 3000;
     public const string PinFileName = "reset_pin.dat";
     public const int PinExpiryMinutes = 30;
