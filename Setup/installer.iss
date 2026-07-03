@@ -1,6 +1,6 @@
 ; RPMC Backup - InnoSetup Installer
 #define MyAppName "RPMC Backup"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "RPMC"
 #define MyAppURL "http://192.168.1.201:9001"
 #define ServiceExe "RPMC_Backup.Service.exe"
