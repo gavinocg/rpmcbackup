@@ -41,6 +41,10 @@ public class MainForm : Form
     private CheckBox _chkSmtpSsl;
     private Button _btnSaveSmtp, _btnTestEmail;
     private FlowLayoutPanel _foldersProgressPanel;
+    private System.Windows.Forms.Timer _errorAlertTimer;
+    private System.Windows.Forms.Timer _degradedAlertTimer;
+    private bool _dismissDegradedAlerts;
+    private bool _errorAlertActive, _degradedAlertActive;
 
     public MainForm()
     {
@@ -512,6 +516,38 @@ public class MainForm : Form
         catch { }
     }
 
+    private void ShowDegradedAlert()
+    {
+        using var form = new Form
+        {
+            Text = "RPMC Backup - Atención",
+            Size = new Size(420, 180),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            TopMost = true
+        };
+        var lbl = new Label { Text = "El servicio de respaldo se encuentra en estado de Atención.\nRevise los logs del sistema para más detalles.", Location = new Point(20, 20), AutoSize = true };
+        var chkDismiss = new CheckBox { Text = "No mostrar este mensaje", Location = new Point(20, 70), AutoSize = true };
+        var btnOk = new Button { Text = "Aceptar", Location = new Point(160, 100), Size = new Size(100, 30) };
+        btnOk.Click += (s, ev) =>
+        {
+            _dismissDegradedAlerts = chkDismiss.Checked;
+            if (_dismissDegradedAlerts)
+            {
+                _degradedAlertTimer?.Stop();
+                _degradedAlertTimer?.Dispose();
+                _degradedAlertTimer = null;
+            }
+            form.Close();
+        };
+        form.Controls.AddRange(new Control[] { lbl, chkDismiss, btnOk });
+        form.AcceptButton = btnOk;
+        form.ShowDialog(this);
+    }
+
     private bool PromptAdminPassword(string action, bool topMost = false)
     {
         var config = LoadConfig();
@@ -902,6 +938,57 @@ public class MainForm : Form
 
 
         UpdateFoldersProgress(state);
+
+        // Error state: persistent alerts every 1h
+        if (state.Status == ServiceStatus.Error && !_errorAlertActive)
+        {
+            _errorAlertActive = true;
+            _errorAlertTimer = new System.Windows.Forms.Timer { Interval = 3600000 };
+            _errorAlertTimer.Tick += (s, ev) =>
+            {
+                var cfg = LoadConfig();
+                var machine = cfg?.MachineName ?? Environment.MachineName;
+                var user = cfg?.MachineUserName ?? Environment.UserName;
+                SendAlertEmail($"RPMC Backup - Error persistente {machine}/{user}",
+                    $"El servicio RPMC Backup permanece en estado Error.\nEquipo: {machine}\nUsuario: {user}");
+                if (IsHandleCreated && !Disposing)
+                    Invoke(() => MessageBox.Show("El servicio RPMC Backup presenta un error persistente.\nRevise los logs del sistema.", "RPMC Backup - Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            };
+            _errorAlertTimer.Start();
+        }
+        if (state.Status != ServiceStatus.Error && _errorAlertActive)
+        {
+            _errorAlertActive = false;
+            _errorAlertTimer?.Stop();
+            _errorAlertTimer?.Dispose();
+            _errorAlertTimer = null;
+        }
+
+        // Degraded state: alerts every 15min with dismiss checkbox
+        if (state.Status == ServiceStatus.Degraded && !_degradedAlertActive && !_dismissDegradedAlerts)
+        {
+            _degradedAlertActive = true;
+            _degradedAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
+            _degradedAlertTimer.Tick += (s, ev) =>
+            {
+                if (_dismissDegradedAlerts)
+                {
+                    _degradedAlertTimer?.Stop();
+                    return;
+                }
+                if (IsHandleCreated && !Disposing)
+                    Invoke(() => ShowDegradedAlert());
+            };
+            _degradedAlertTimer.Start();
+        }
+        if (state.Status != ServiceStatus.Degraded)
+        {
+            _degradedAlertActive = false;
+            _dismissDegradedAlerts = false;
+            _degradedAlertTimer?.Stop();
+            _degradedAlertTimer?.Dispose();
+            _degradedAlertTimer = null;
+        }
 
         if (!string.IsNullOrEmpty(state.DataError) && state.DataError != _lastDataError)
         {
