@@ -13,6 +13,7 @@ public class MinioUploader
 {
     private const string S3Service = "s3";
     private const string UnsignedPayload = "UNSIGNED-PAYLOAD";
+    private const string EmptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     private readonly IMinioClient _client;
     private readonly string _bucket;
@@ -130,9 +131,9 @@ public class MinioUploader
             var amzDate = now.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
             var dateStamp = now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-            var signedHeaders = "host;x-amz-date";
-            var canonicalHeaders = $"host:{host}\nx-amz-date:{amzDate}\n";
-            var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQuery}\n{canonicalHeaders}\n{signedHeaders}\n{UnsignedPayload}";
+            var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+            var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{EmptyPayloadHash}\nx-amz-date:{amzDate}\n";
+            var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQuery}\n{canonicalHeaders}\n{signedHeaders}\n{EmptyPayloadHash}";
 
             var credentialScope = $"{dateStamp}/{_region}/{S3Service}/aws4_request";
             var stringToSign = $"AWS4-HMAC-SHA256\n{amzDate}\n{credentialScope}\n{Hex(SHA256(Encoding.UTF8.GetBytes(canonicalRequest)))}";
@@ -145,6 +146,7 @@ public class MinioUploader
             var url = $"{protocol}://{_endpoint}{canonicalUri}?{canonicalQuery}";
             using var msg = new HttpRequestMessage(HttpMethod.Get, url);
             msg.Headers.TryAddWithoutValidation("x-amz-date", amzDate);
+            msg.Headers.TryAddWithoutValidation("x-amz-content-sha256", EmptyPayloadHash);
             msg.Headers.TryAddWithoutValidation("Authorization", authorization);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
