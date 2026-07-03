@@ -115,65 +115,24 @@ public class MinioUploader
     public async Task<Dictionary<string, DateTime>> ListExistingObjectsAsync(string prefix, CancellationToken ct)
     {
         var result = new Dictionary<string, DateTime>();
-        var protocol = _useSsl ? "https" : "http";
-        var host = new Uri($"{protocol}://{_endpoint}").Authority;
-        string? continuationToken = null;
-
-        do
+        try
         {
-            var encodedPrefix = Uri.EscapeDataString(prefix);
-            var canonicalUri = $"/{_bucket}";
-            var canonicalQuery = $"list-type=2&prefix={encodedPrefix}";
-            if (!string.IsNullOrEmpty(continuationToken))
-                canonicalQuery += $"&continuation-token={Uri.EscapeDataString(continuationToken)}";
-
-            var now = DateTime.UtcNow;
-            var amzDate = now.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
-            var dateStamp = now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-
-            var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-            var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{EmptyPayloadHash}\nx-amz-date:{amzDate}\n";
-            var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQuery}\n{canonicalHeaders}\n{signedHeaders}\n{EmptyPayloadHash}";
-
-            var credentialScope = $"{dateStamp}/{_region}/{S3Service}/aws4_request";
-            var stringToSign = $"AWS4-HMAC-SHA256\n{amzDate}\n{credentialScope}\n{Hex(SHA256(Encoding.UTF8.GetBytes(canonicalRequest)))}";
-
-            var signingKey = GetSigningKey(_secretKey, dateStamp, _region, S3Service);
-            var signature = Hex(HMAC(signingKey, Encoding.UTF8.GetBytes(stringToSign)));
-
-            var authorization = $"AWS4-HMAC-SHA256 Credential={_accessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-
-            var url = $"{protocol}://{_endpoint}{canonicalUri}?{canonicalQuery}";
-            using var msg = new HttpRequestMessage(HttpMethod.Get, url);
-            msg.Headers.TryAddWithoutValidation("x-amz-date", amzDate);
-            msg.Headers.TryAddWithoutValidation("x-amz-content-sha256", EmptyPayloadHash);
-            msg.Headers.TryAddWithoutValidation("Authorization", authorization);
-
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
-            var response = await _http.SendAsync(msg, HttpCompletionOption.ResponseContentRead, timeoutCts.Token);
-            response.EnsureSuccessStatusCode();
-
-            var xml = await response.Content.ReadAsStringAsync(ct);
-            var doc = XDocument.Parse(xml);
-            var ns = doc.Root!.Name.Namespace;
-
-            foreach (var contents in doc.Descendants(ns + "Contents"))
+            var args = new ListObjectsArgs()
+                .WithBucket(_bucket)
+                .WithPrefix(prefix)
+                .WithRecursive(true);
+            var items = _client.ListObjectsEnumAsync(args, ct);
+            await foreach (var item in items)
             {
-                var key = contents.Element(ns + "Key")?.Value;
-                var lastModified = contents.Element(ns + "LastModified")?.Value;
-                if (key != null && lastModified != null && DateTime.TryParse(lastModified, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
-                    result[key] = ts;
+                var ts = item.LastModifiedDateTime;
+                if (ts.HasValue)
+                    result[item.Key] = ts.Value;
             }
-
-            var isTruncated = doc.Root.Element(ns + "IsTruncated")?.Value;
-            continuationToken = doc.Root.Element(ns + "NextContinuationToken")?.Value;
-
-            if (isTruncated != "true")
-                break;
-
-        } while (true);
-
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException($"ListObjects failed: {ex.Message}", ex);
+        }
         return result;
     }
 
