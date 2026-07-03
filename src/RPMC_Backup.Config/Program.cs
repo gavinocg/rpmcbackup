@@ -77,7 +77,9 @@ if (cmdArgs.Length > 1 && cmdArgs[1] == "--elevated")
 {
     ApplicationConfiguration.Initialize();
     var form = new MainForm();
-    form.WindowState = FormWindowState.Minimized;
+    var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RPMC\\Backup", "config.dat");
+    if (File.Exists(configPath))
+        form.WindowState = FormWindowState.Minimized;
     Application.Run(form);
     return;
 }
