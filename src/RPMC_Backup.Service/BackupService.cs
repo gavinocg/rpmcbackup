@@ -244,6 +244,7 @@ public class BackupService : BackgroundService
             var folderFiles = new List<string>();
             foreach (var file in files)
             {
+                if (new FileInfo(file).Length == 0) continue;
                 if (existing != null)
                 {
                     var relPath = file.Substring(folder.Path.Length).TrimStart('\\', '/').Replace('\\', '/');
@@ -521,6 +522,7 @@ public class BackupService : BackgroundService
             foreach (var file in files)
             {
                 if (ct.IsCancellationRequested) return;
+                if (new FileInfo(file).Length == 0) continue;
                 var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
                 if (shouldExclude) continue;
                 if (_lastSyncTime > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
@@ -615,6 +617,7 @@ public class BackupService : BackgroundService
                     foreach (var file in files)
                     {
                         if (ct.IsCancellationRequested) return;
+                        if (new FileInfo(file).Length == 0) continue;
                         var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
                         if (shouldExclude) continue;
                         if (_lastSyncTime > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
