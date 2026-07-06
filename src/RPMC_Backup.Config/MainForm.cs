@@ -45,6 +45,7 @@ public class MainForm : Form
     private System.Windows.Forms.Timer _degradedAlertTimer;
     private bool _dismissDegradedAlerts;
     private bool _errorAlertActive, _degradedAlertActive;
+    private bool _updatingUI;
 
     public MainForm()
     {
@@ -912,6 +913,10 @@ public class MainForm : Form
 
     private void UpdateStatusUI(ServiceStateInfo state)
     {
+        if (_updatingUI) return;
+        _updatingUI = true;
+        try
+        {
         var color = state.IsVerifying ? Color.DodgerBlue : state.Status switch
         {
             ServiceStatus.Running => Color.Green,
@@ -972,7 +977,7 @@ public class MainForm : Form
                 SendAlertEmail($"RPMC Backup - Error persistente {machine}/{user}",
                     $"El servicio RPMC Backup permanece en estado Error.\nEquipo: {machine}\nUsuario: {user}");
                 if (IsHandleCreated && !Disposing)
-                    Invoke(() => ShowErrorAlert());
+                    ShowErrorAlert();
             }
             _errorAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
             _errorAlertTimer.Tick += (s, ev) => ErrorTick();
@@ -999,7 +1004,7 @@ public class MainForm : Form
                     return;
                 }
                 if (IsHandleCreated && !Disposing)
-                    Invoke(() => ShowDegradedAlert());
+                    ShowDegradedAlert();
             }
             _degradedAlertTimer = new System.Windows.Forms.Timer { Interval = 900000 };
             _degradedAlertTimer.Tick += (s, ev) => DegradedTick();
@@ -1070,6 +1075,8 @@ public class MainForm : Form
         if (state.Status != ServiceStatus.Degraded)
             _lastDegraded = false;
 
+        }
+        finally { _updatingUI = false; }
     }
 
     private void RefreshFolders()
