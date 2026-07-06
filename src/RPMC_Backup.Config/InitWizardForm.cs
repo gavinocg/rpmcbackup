@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.ServiceProcess;
+using System.Text;
 using Minio;
 using Minio.DataModel.Args;
 using Minio.Exceptions;
@@ -360,27 +362,44 @@ public class InitWizardForm : Form
                         await client.MakeBucketAsync(new MakeBucketArgs().WithBucket(config.BucketName));
                     }
 
-                    // Start service
-                    var scPsi = new ProcessStartInfo("sc", "start rpmc-backup-service")
+                    // Start service and wait for Running state
+                    ServiceController? svc = null;
+                    try { svc = new ServiceController(Constants.ServiceName); } catch { }
+                    if (svc != null)
                     {
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    var scProcess = Process.Start(scPsi);
-                    scProcess?.WaitForExit(10000);
+                        try { svc.Start(); } catch { }
+                        svc.Refresh();
+                        var waitAttempts = 0;
+                        while (svc.Status != ServiceControllerStatus.Running && waitAttempts < 24)
+                        {
+                            await Task.Delay(2000);
+                            svc.Refresh();
+                            waitAttempts++;
+                        }
 
-                    if (scProcess?.ExitCode != 0)
-                    {
-                        MessageBox.Show(
-                            "La configuración se guardó correctamente, pero el servicio no pudo iniciar.\n\n" +
-                            "Puede intentar iniciarlo manualmente desde el Administrador de Servicios (services.msc)\n" +
-                            "o reiniciar el equipo para que el servicio arranque automáticamente.\n\n" +
-                            "Una vez iniciado el servicio, ejecute RPMC Backup desde el icono del escritorio.",
-                            "Atención - Servicio no iniciado",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        DialogResult = DialogResult.OK;
-                        Close();
-                        return;
+                        if (svc.Status != ServiceControllerStatus.Running)
+                        {
+                            // Read event log for error details
+                            var errorMsg = "El servicio no respondió dentro del tiempo de espera.";
+                            try
+                            {
+                                var events = GetServiceErrorEvents();
+                                if (events.Length > 0)
+                                    errorMsg = string.Join("\n", events.Take(3));
+                            }
+                            catch { }
+
+                            MessageBox.Show(
+                                $"El servicio no pudo iniciar.\n\n{errorMsg}\n\n" +
+                                "Verifique que:\n" +
+                                "• El servidor MinIO esté encendido y accesible\n" +
+                                "• Las credenciales ingresadas sean correctas\n\n" +
+                                "Puede reintentar después de revisar los puntos anteriores.",
+                                "Error al iniciar servicio",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            _btnNext.Enabled = true;
+                            return;
+                        }
                     }
 
                     // Register auto-start in Registry (tray mode)
@@ -440,5 +459,27 @@ public class InitWizardForm : Form
                 }
                 break;
         }
+    }
+
+    private static string[] GetServiceErrorEvents()
+    {
+        var result = new List<string>();
+        try
+        {
+            using var wmi = new System.Management.ManagementObjectSearcher(
+                "SELECT TimeGenerated, Message FROM Win32_NTLogEvent " +
+                "WHERE LogFile='Application' " +
+                "AND SourceName LIKE '%RPMC%' " +
+                "AND EventType = 1 " +
+                "AND TimeGenerated >= '" + DateTime.Now.AddMinutes(-5).ToString("yyyyMMddHHmmss") + "'");
+            foreach (var obj in wmi.Get())
+            {
+                var msg = obj["Message"]?.ToString() ?? "";
+                if (msg.Length > 200) msg = msg.Substring(0, 200) + "...";
+                result.Add(msg);
+            }
+        }
+        catch { }
+        return result.ToArray();
     }
 }
