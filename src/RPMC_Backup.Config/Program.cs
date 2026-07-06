@@ -73,6 +73,13 @@ if (cmdArgs.Length > 1 && cmdArgs[1] == "--install-service")
     return;
 }
 
+if (cmdArgs.Length > 1 && cmdArgs[1] == "--tray")
+{
+    ApplicationConfiguration.Initialize();
+    Application.Run(new TrayApplicationContext());
+    return;
+}
+
 if (cmdArgs.Length > 1 && cmdArgs[1] == "--elevated")
 {
     ApplicationConfiguration.Initialize();

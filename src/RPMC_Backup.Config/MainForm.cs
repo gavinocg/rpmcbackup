@@ -34,7 +34,7 @@ public class MainForm : Form
     private ComboBox _cmbConnBucket;
     private DataGridView _sysLogGrid;
     private ComboBox _cmbSysLogLevel;
-    private CheckBox _chkConnSsl, _chkAutoStart;
+    private CheckBox _chkConnSsl;
     private Button _btnConnTest;
     private Label _lblConnResult;
     private TextBox _txtSmtpHost, _txtSmtpPort, _txtSmtpUser, _txtSmtpPass, _txtSmtpFrom, _txtAdminEmailConfig;
@@ -165,8 +165,7 @@ public class MainForm : Form
         _txtConnRegion = new TextBox { Location = new Point(120, 142), Width = 400 };
         _txtConnMachineName = new TextBox { Location = new Point(120, 172), Width = 400, ReadOnly = true };
         _chkConnSsl = new CheckBox { Text = "Usar SSL (HTTPS)", Location = new Point(120, 200), AutoSize = true };
-        _chkAutoStart = new CheckBox { Text = "Iniciar con Windows", Location = new Point(120, 220), AutoSize = true, Checked = true };
-        _btnConnTest = new Button { Location = new Point(120, 250), Size = new Size(130, 28), Text = "Probar Conexión" };
+        _btnConnTest = new Button { Location = new Point(120, 220), Size = new Size(130, 28), Text = "Probar Conexión" };
         _lblConnResult = new Label { Location = new Point(260, 255), AutoSize = true };
         _btnConnTest.Click += async (s, e) =>
         {
@@ -200,7 +199,7 @@ public class MainForm : Form
         };
         groupInfo.Controls.AddRange(new Control[] { lblEp, lblAk, lblSk, lblBk, lblRg, lblMc,
             _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _cmbConnBucket, _txtConnRegion, _txtConnMachineName,
-            _chkConnSsl, _chkAutoStart, _btnConnTest, _lblConnResult
+            _chkConnSsl, _btnConnTest, _lblConnResult
         });
 
         var btnSave = new Button { Text = "Guardar Cambios", Size = new Size(130, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
@@ -219,19 +218,6 @@ public class MainForm : Form
             cfg.MachineName = _txtConnMachineName.Text;
             cfg.S3Region = _txtConnRegion.Text;
             SaveConfig(cfg);
-            try
-            {
-                var reg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
-                if (reg != null)
-                {
-                    if (_chkAutoStart.Checked)
-                        reg.SetValue("RPMC Backup", $"\"{Environment.ProcessPath}\" --minimized");
-                    else
-                        reg.DeleteValue("RPMC Backup", false);
-                    reg.Dispose();
-                }
-            }
-            catch { }
             SendIpc(Constants.CmdReconfig);
             MessageBox.Show("Configuración guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
@@ -720,7 +706,7 @@ public class MainForm : Form
             {
                 ShowInTaskbar = false;
                 Hide();
-                _trayIcon.ShowBalloonTip(3000, "RPMC Backup", "Configuración inicial completada. La aplicacion se ejecuta en segundo plano.", ToolTipIcon.Info);
+                _trayIcon.ShowBalloonTip(3000, "RPMC Backup", "Configuración inicial completada.", ToolTipIcon.Info);
                 _statusTimer = new System.Windows.Forms.Timer { Interval = Constants.TrayPollIntervalMs };
                 _statusTimer.Tick += async (s, ev) => await Task.Run(() => RefreshStatus());
                 _statusTimer.Start();
@@ -730,14 +716,6 @@ public class MainForm : Form
                 RefreshStatus();
                 LoadConnectionConfig();
                 LoadSmtpConfig();
-                try
-                {
-                    var reg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
-                    if (reg?.GetValue("RPMC Backup") == null)
-                        reg?.SetValue("RPMC Backup", $"\"{Environment.ProcessPath}\" --minimized");
-                    reg?.Dispose();
-                }
-                catch { }
                 return;
             }
             _closingToTray = false;
@@ -771,13 +749,6 @@ public class MainForm : Form
         RefreshStatus();
         LoadConnectionConfig();
         LoadSmtpConfig();
-
-        var cmds = Environment.GetCommandLineArgs();
-        if (cmds.Length > 1 && cmds[1] == "--minimized")
-        {
-            ShowInTaskbar = false;
-            Hide();
-        }
     }
 
     private void LoadConnectionConfig()
@@ -791,13 +762,6 @@ public class MainForm : Form
         _cmbConnBucket.Text = cfg.BucketName;
         _txtConnMachineName.Text = cfg.MachineName;
         _txtConnRegion.Text = cfg.S3Region;
-        try
-        {
-            var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-            _chkAutoStart.Checked = key?.GetValue("RPMC Backup") != null;
-            key?.Dispose();
-        }
-        catch { }
     }
 
     private void LoadSmtpConfig()

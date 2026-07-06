@@ -5,6 +5,8 @@
 #define MyAppURL "http://192.168.1.201:9001"
 #define ServiceExe "RPMC_Backup.Service.exe"
 #define ConfigExe "RPMC_Backup.Config.exe"
+#define TrayExe "RPMC_Backup.Config.exe"
+#define TrayArgs "--tray"
 
 [Setup]
 AppId={{B8B5F3E2-9F1A-4C2D-A1E3-8F9B7C6D5E4F}
@@ -40,12 +42,13 @@ Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{commonappdata}\RPMC\Backup"; Flags: uninsalwaysuninstall
 
 [Icons]
+Name: "{group}\RPMC Backup"; Filename: "{app}\{#TrayExe}"; Parameters: "{#TrayArgs}"; IconFilename: "{app}\icon.ico"
+Name: "{commondesktop}\RPMC Backup"; Filename: "{app}\{#TrayExe}"; Parameters: "{#TrayArgs}"; IconFilename: "{app}\icon.ico"
 Name: "{group}\RPMC Backup Config"; Filename: "{app}\{#ConfigExe}"; IconFilename: "{app}\icon.ico"
-Name: "{commondesktop}\RPMC Backup"; Filename: "{app}\{#ConfigExe}"; IconFilename: "{app}\icon.ico"
 Name: "{group}\Desinstalar RPMC Backup"; Filename: "{uninstallexe}"; IconFilename: "{app}\icon.ico"
 
 [Run]
-Filename: "{app}\{#ConfigExe}"; Flags: runasoriginaluser nowait postinstall; Description: "Abrir RPMC Backup Config"
+Filename: "{app}\{#TrayExe}"; Parameters: "{#TrayArgs}"; Flags: runasoriginaluser nowait postinstall; Description: "Iniciar RPMC Backup"
 
 [UninstallRun]
 Filename: "{sys}\sc.exe"; Parameters: "stop rpmc-backup-service"; Flags: runhidden; StatusMsg: "Deteniendo servicio..."
@@ -65,7 +68,7 @@ var
 begin
   Exec(ExpandConstant('{sys}\sc.exe'), 'stop rpmc-backup-service', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\sc.exe'), 'delete rpmc-backup-service', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im {#ConfigExe}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im RPMC_Backup.Config.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 procedure StartService;
@@ -134,10 +137,17 @@ begin
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+procedure RegisterAutoStart;
+begin
+  RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+    'RPMC Backup', ExpandConstant('"{app}\{#TrayExe}" {#TrayArgs}'));
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    RegisterAutoStart;
     StartService;
   end;
 end;

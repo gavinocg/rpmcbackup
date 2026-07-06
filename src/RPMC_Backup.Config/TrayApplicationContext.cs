@@ -1,0 +1,251 @@
+using System.IO.Pipes;
+using System.Text;
+using System.Text.Json;
+using RPMC_Backup.Shared;
+
+namespace RPMC_Backup.Config;
+
+public class TrayApplicationContext : ApplicationContext
+{
+    private NotifyIcon _trayIcon;
+    private ContextMenuStrip _menu;
+    private ToolStripMenuItem _toggleItem;
+    private System.Windows.Forms.Timer _statusTimer;
+    private readonly System.Windows.Forms.Timer _startupRetryTimer;
+    private readonly Dictionary<ServiceStatus, Icon> _icons;
+
+    private const int CmdStart = 0, CmdStop = 1, CmdPause = 2, CmdResume = 3;
+
+    public TrayApplicationContext()
+    {
+        _icons = GenerateIcons();
+
+        _menu = new ContextMenuStrip();
+        _menu.Items.Add("Abrir Configuración", null, (s, e) => RunWithPassword("Abrir Configuración", CmdStart));
+        _menu.Items.Add("Sincronizar ahora", null, (s, e) => SendIpc(Constants.CmdSyncNow));
+        _toggleItem = new ToolStripMenuItem("Pausar respaldo");
+        _toggleItem.Click += (s, e) =>
+        {
+            if (_toggleItem.Text == "Pausar respaldo")
+                SendIpc(Constants.CmdPause);
+            else
+                SendIpc(Constants.CmdResume);
+        };
+        _menu.Items.Add(_toggleItem);
+        _menu.Items.Add(new ToolStripSeparator());
+        _menu.Items.Add("Salir", null, (s, e) => RunWithPassword("Salir del aplicativo", CmdStop));
+
+        _trayIcon = new NotifyIcon
+        {
+            Text = "RPMC Backup",
+            ContextMenuStrip = _menu,
+            Visible = true,
+            Icon = _icons[ServiceStatus.Unknown]
+        };
+        _trayIcon.DoubleClick += (s, e) => RunWithPassword("Abrir Configuración", CmdStart);
+
+        TryStartService();
+
+        _statusTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+        _statusTimer.Tick += (s, e) => PollService();
+        _statusTimer.Start();
+
+        _startupRetryTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        _startupRetryTimer.Tick += (s, e) => TryStartService();
+        _startupRetryTimer.Start();
+    }
+
+    private static Dictionary<ServiceStatus, Icon> GenerateIcons()
+    {
+        var icons = new Dictionary<ServiceStatus, Icon>();
+        foreach (var (status, color) in new[]
+        {
+            (ServiceStatus.Running, Color.Green),
+            (ServiceStatus.Paused, Color.Orange),
+            (ServiceStatus.Degraded, Color.Orange),
+            (ServiceStatus.Error, Color.Red),
+            (ServiceStatus.Stopped, Color.Red),
+            (ServiceStatus.Unknown, Color.Gray)
+        })
+        {
+            using var bmp = new Bitmap(16, 16);
+            using var g = Graphics.FromImage(bmp);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            g.FillEllipse(new SolidBrush(color), 1, 1, 14, 14);
+            var hIcon = bmp.GetHicon();
+            icons[status] = Icon.FromHandle(hIcon);
+        }
+        return icons;
+    }
+
+    private void TryStartService()
+    {
+        try
+        {
+            using var svc = new System.ServiceProcess.ServiceController(Constants.ServiceName);
+            if (svc.Status == System.ServiceProcess.ServiceControllerStatus.Stopped)
+            {
+                svc.Start();
+                svc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+            }
+            _startupRetryTimer?.Stop();
+            _startupRetryTimer?.Dispose();
+        }
+        catch { }
+    }
+
+    private void PollService()
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", Constants.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            pipe.Connect(2000);
+            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            writer.WriteLine(JsonSerializer.Serialize(new IpcRequest { Command = Constants.CmdGetStatus }));
+            using var reader = new StreamReader(pipe);
+            var responseJson = reader.ReadLine();
+            if (responseJson != null)
+            {
+                var response = JsonSerializer.Deserialize<IpcResponse>(responseJson);
+                if (response?.Success == true && response.State != null)
+                {
+                    UpdateTray(response.State);
+                    return;
+                }
+            }
+        }
+        catch { }
+        _trayIcon.Icon = _icons[ServiceStatus.Unknown];
+        _trayIcon.Text = "RPMC Backup - Servicio no disponible";
+    }
+
+    private void UpdateTray(ServiceStateInfo state)
+    {
+        var status = state.Status;
+        var icon = _icons.TryGetValue(status, out var cached) ? cached : _icons[ServiceStatus.Unknown];
+        _trayIcon.Icon = icon;
+
+        _trayIcon.Text = status switch
+        {
+            ServiceStatus.Running => state.IsSyncing ? "RPMC Backup - Sincronizando" : "RPMC Backup - Listo",
+            ServiceStatus.Paused => "RPMC Backup - Pausado",
+            ServiceStatus.Degraded => "RPMC Backup - Atención",
+            ServiceStatus.Error => "RPMC Backup - Error",
+            ServiceStatus.Stopped => "RPMC Backup - Detenido",
+            _ => "RPMC Backup"
+        };
+
+        _toggleItem.Text = status is ServiceStatus.Stopped or ServiceStatus.Paused
+            ? "Reanudar respaldo"
+            : "Pausar respaldo";
+    }
+
+    private void SendIpc(string command, string payload = "")
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", Constants.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            pipe.Connect(Constants.PipeConnectTimeoutMs);
+            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            writer.WriteLine(JsonSerializer.Serialize(new IpcRequest { Command = command, Payload = payload }));
+        }
+        catch { }
+    }
+
+    private void RunWithPassword(string action, int command)
+    {
+        if (!PromptAdminPassword(action))
+            return;
+
+        switch (command)
+        {
+            case CmdStart:
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = Environment.ProcessPath ?? "RPMC_Backup.Config.exe",
+                        UseShellExecute = true
+                    });
+                }
+                catch { }
+                break;
+            case CmdStop:
+                Application.Exit();
+                break;
+        }
+    }
+
+    private bool PromptAdminPassword(string action)
+    {
+        var cfg = LoadConfig();
+        if (cfg == null || string.IsNullOrEmpty(cfg.AdminHash))
+            return true;
+        if (!BCrypt.Net.BCrypt.Verify(ShowPasswordDialog(action), cfg.AdminHash))
+        {
+            MessageBox.Show("Clave incorrecta.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private static string ShowPasswordDialog(string action)
+    {
+        using var form = new Form
+        {
+            Text = $"RPMC Backup - {action}",
+            Size = new Size(380, 170),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterScreen,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            TopMost = true
+        };
+        var lbl = new Label { Text = $"Ingrese clave de administrador para\n{action}:", Location = new Point(20, 20), AutoSize = true };
+        var txt = new TextBox { Location = new Point(20, 55), Width = 320, UseSystemPasswordChar = true };
+        var btnOk = new Button { Location = new Point(120, 90), Size = new Size(100, 30), Text = "Aceptar", DialogResult = DialogResult.OK };
+        var btnCancel = new Button { Location = new Point(230, 90), Size = new Size(100, 30), Text = "Cancelar", DialogResult = DialogResult.Cancel };
+        form.Controls.AddRange(new Control[] { lbl, txt, btnOk, btnCancel });
+        form.AcceptButton = btnOk;
+        form.CancelButton = btnCancel;
+
+        if (form.ShowDialog() == DialogResult.OK)
+            return txt.Text;
+        return string.Empty;
+    }
+
+    private static AppConfig? LoadConfig()
+    {
+        var path = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            Constants.ConfigDir, Constants.ConfigFileName);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var data = File.ReadAllBytes(path);
+            if (data.Length < 4 || data[0] != 0x52 || data[1] != 0x50 || data[2] != 0x4D || data[3] != 0x43) return null;
+            var json = System.Text.Encoding.UTF8.GetString(data, 4, data.Length - 4);
+            return JsonSerializer.Deserialize<AppConfig>(json);
+        }
+        catch { return null; }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _statusTimer?.Stop();
+            _statusTimer?.Dispose();
+            _startupRetryTimer?.Stop();
+            _startupRetryTimer?.Dispose();
+            if (_trayIcon != null) _trayIcon.Visible = false;
+            _trayIcon?.Dispose();
+            _menu?.Dispose();
+            foreach (var icon in _icons.Values)
+                icon?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
