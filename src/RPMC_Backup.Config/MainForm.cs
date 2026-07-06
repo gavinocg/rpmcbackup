@@ -771,6 +771,13 @@ public class MainForm : Form
         RefreshStatus();
         LoadConnectionConfig();
         LoadSmtpConfig();
+
+        var cmds = Environment.GetCommandLineArgs();
+        if (cmds.Length > 1 && cmds[1] == "--minimized")
+        {
+            ShowInTaskbar = false;
+            Hide();
+        }
     }
 
     private void LoadConnectionConfig()

@@ -88,10 +88,13 @@ if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInR
 {
     try
     {
+        var elevatedArg = "--elevated";
+        if (cmdArgs.Length > 1 && cmdArgs[1] == "--minimized")
+            elevatedArg = "--minimized";
         var psi = new ProcessStartInfo
         {
             FileName = Environment.ProcessPath,
-            Arguments = "--elevated",
+            Arguments = elevatedArg,
             Verb = "runas",
             UseShellExecute = true
         };
