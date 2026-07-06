@@ -723,10 +723,19 @@ public class MainForm : Form
             return;
         }
         var cmdArgs = Environment.GetCommandLineArgs();
-        if (cmdArgs.Length > 1 && (cmdArgs[1] == "--start-service" || cmdArgs[1] == "--install-service"))
+        var isTray = cmdArgs.Length > 1 && cmdArgs[1] == "--tray";
+
+        if (!isTray)
         {
+            if (!PromptAdminPassword("Abrir Configuración"))
+            {
+                _closingToTray = false;
+                Close();
+                return;
+            }
         }
-        else
+
+        if (!isTray)
         {
             try
             {

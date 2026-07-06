@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using Minio;
 using Minio.DataModel.Args;
+using Minio.Exceptions;
 using RPMC_Backup.Shared;
 
 namespace RPMC_Backup.Config;
@@ -342,42 +343,99 @@ public class InitWizardForm : Form
                     Directory.CreateDirectory(dir);
                     var json = System.Text.Json.JsonSerializer.Serialize(config);
                     var data = new byte[] { 0x52, 0x50, 0x4D, 0x43 }.Concat(System.Text.Encoding.UTF8.GetBytes(json)).ToArray();
-                    File.WriteAllBytes(Path.Combine(dir, Constants.ConfigFileName), data);
+                    var configPath = Path.Combine(dir, Constants.ConfigFileName);
+                    File.WriteAllBytes(configPath, data);
 
+                    // Test MinIO connection
+                    var client = new MinioClient()
+                        .WithEndpoint(config.MinioEndpoint)
+                        .WithCredentials(config.MinioAccessKey, config.MinioSecretKey);
+                    if (!config.MinioUseSsl) client.WithSSL(false);
+                    client.Build();
+                    var buckets = await client.ListBucketsAsync();
+
+                    var bucketExists = buckets.Buckets.Any(b => b.Name.Equals(config.BucketName, StringComparison.OrdinalIgnoreCase));
+                    if (!bucketExists)
+                    {
+                        await client.MakeBucketAsync(new MakeBucketArgs().WithBucket(config.BucketName));
+                    }
+
+                    // Start service
+                    var scPsi = new ProcessStartInfo("sc", "start rpmc-backup-service")
+                    {
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    var scProcess = Process.Start(scPsi);
+                    scProcess?.WaitForExit(10000);
+
+                    if (scProcess?.ExitCode != 0)
+                    {
+                        MessageBox.Show(
+                            "La configuración se guardó correctamente, pero el servicio no pudo iniciar.\n\n" +
+                            "Puede intentar iniciarlo manualmente desde el Administrador de Servicios (services.msc)\n" +
+                            "o reiniciar el equipo para que el servicio arranque automáticamente.\n\n" +
+                            "Una vez iniciado el servicio, ejecute RPMC Backup desde el icono del escritorio.",
+                            "Atención - Servicio no iniciado",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        DialogResult = DialogResult.OK;
+                        Close();
+                        return;
+                    }
+
+                    // Register auto-start in Registry (tray mode)
                     try
                     {
-                        var client = new MinioClient()
-                            .WithEndpoint(config.MinioEndpoint)
-                            .WithCredentials(config.MinioAccessKey, config.MinioSecretKey);
-                        if (!config.MinioUseSsl) client.WithSSL(false);
-                        client.Build();
-                        var exists = await client.BucketExistsAsync(new BucketExistsArgs().WithBucket(config.BucketName));
-                        if (!exists)
+                        var reg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                            @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                        if (reg != null)
                         {
-                            await client.MakeBucketAsync(new MakeBucketArgs().WithBucket(config.BucketName));
+                            reg.SetValue("RPMC Backup",
+                                $"\"{Application.ExecutablePath}\" --tray");
+                            reg.Dispose();
                         }
                     }
                     catch { }
 
-                    DialogResult = DialogResult.OK;
+                    // Launch tray
                     try
                     {
-                        var psi = new ProcessStartInfo(Environment.ProcessPath, "--install-service")
+                        Process.Start(new ProcessStartInfo
                         {
-                            Verb = "runas",
-                            UseShellExecute = true,
-                            WindowStyle = ProcessWindowStyle.Hidden
-                        };
-                        Process.Start(psi);
+                            FileName = Application.ExecutablePath,
+                            Arguments = "--tray",
+                            UseShellExecute = true
+                        });
                     }
                     catch { }
 
-                    MessageBox.Show("Configuracion guardada correctamente.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("Configuración completada correctamente.\n\n" +
+                        "El servicio de respaldo está funcionando. Puede acceder a la configuración\n" +
+                        "desde el icono en la bandeja del sistema (system tray).",
+                        "RPMC Backup",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    DialogResult = DialogResult.OK;
                     Close();
+                }
+                catch (MinioException ex)
+                {
+                    MessageBox.Show(
+                        "No se pudo conectar al servidor MinIO.\n\n" +
+                        $"Endpoint: {_txtEndpoint.Text}\n" +
+                        $"Bucket: {_txtBucketName.Text}\n" +
+                        $"Error: {ex.Message}\n\n" +
+                        "Verifique que:\n" +
+                        "• El servidor MinIO esté encendido y accesible\n" +
+                        "• Las credenciales (Access Key / Secret Key) sean correctas\n" +
+                        "• La dirección IP y puerto sean los correctos",
+                        "Error de conexión",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    _btnNext.Enabled = true;
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Error al guardar configuración: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show($"Error al guardar configuración: {ex.Message}",
+                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     _btnNext.Enabled = true;
                 }
                 break;
