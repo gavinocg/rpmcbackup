@@ -704,18 +704,8 @@ public class MainForm : Form
             wizard.TopMost = true;
             if (wizard.ShowDialog() == DialogResult.OK)
             {
-                ShowInTaskbar = false;
-                Hide();
-                _trayIcon.ShowBalloonTip(3000, "RPMC Backup", "Configuración inicial completada.", ToolTipIcon.Info);
-                _statusTimer = new System.Windows.Forms.Timer { Interval = Constants.TrayPollIntervalMs };
-                _statusTimer.Tick += async (s, ev) => await Task.Run(() => RefreshStatus());
-                _statusTimer.Start();
-                RefreshFolders();
-                RefreshFileLogs();
-                RefreshSysLogs();
-                RefreshStatus();
-                LoadConnectionConfig();
-                LoadSmtpConfig();
+                _closingToTray = false;
+                Close();
                 return;
             }
             _closingToTray = false;
