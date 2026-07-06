@@ -100,11 +100,11 @@ public class FolderWatcher : IDisposable
             try
             {
                 var cfg = new ConfigManager().Load();
-                var shouldExclude = cfg?.Folders
+                var patterns = cfg?.Folders
                     .Where(f => fullPath.StartsWith(f.Path, StringComparison.OrdinalIgnoreCase))
                     .SelectMany(f => f.ExcludePatterns)
-                    .Any(p => System.IO.Path.GetExtension(fullPath).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase)) ?? false;
-                if (shouldExclude) continue;
+                    .ToList();
+                if (patterns != null && IsExcluded(fullPath, patterns)) continue;
 
                 await _onChange(folder, fullPath);
             }
@@ -118,5 +118,35 @@ public class FolderWatcher : IDisposable
         Stop();
         foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
         _debounceTimer?.Dispose();
+    }
+
+    private static bool IsExcluded(string filePath, List<string> excludePatterns)
+    {
+        if (excludePatterns == null || excludePatterns.Count == 0) return false;
+        foreach (var pattern in excludePatterns)
+        {
+            if (string.IsNullOrEmpty(pattern)) continue;
+            if (pattern.StartsWith("*."))
+            {
+                var ext = pattern.TrimStart('*');
+                if (System.IO.Path.GetExtension(filePath).Equals(ext, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            else
+            {
+                var searchStr = "\\" + pattern.TrimEnd('\\', '/') + "\\";
+                if (filePath.IndexOf(searchStr, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+                if (filePath.EndsWith("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var remainder = filePath.Substring(filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) + pattern.Length + 1);
+                    if (remainder.Length == 0 || remainder.StartsWith("\\"))
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 }

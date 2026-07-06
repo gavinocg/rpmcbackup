@@ -1,6 +1,6 @@
 ; RPMC Backup - InnoSetup Installer
 #define MyAppName "RPMC Backup"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.1.2"
 #define MyAppPublisher "RPMC"
 #define MyAppURL "http://192.168.1.201:9001"
 #define ServiceExe "RPMC_Backup.Service.exe"
@@ -33,7 +33,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Files]
 Source: "..\src\RPMC_Backup.Service\bin\Release\net8.0\publish\*"; DestDir: "{app}\service"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "..\src\RPMC_Backup.Config\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
-Source: "..\src\RPMC_Backup.UninstallCheck\bin\Release\net8.0\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
+Source: "..\src\RPMC_Backup.UninstallCheck\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]

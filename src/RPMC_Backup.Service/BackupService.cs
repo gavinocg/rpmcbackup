@@ -221,7 +221,7 @@ public class BackupService : BackgroundService
             var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             _logger.LogInformation($"Scanning {folder.Path} (Recursive={folder.Recursive})");
             var files = Directory.GetFiles(folder.Path, "*", searchOpt).Where(f =>
-                !folder.ExcludePatterns.Any(p => Path.GetExtension(f).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase))).ToList();
+                !IsExcluded(f, folder.ExcludePatterns)).ToList();
             _logger.LogInformation($"Found {files.Count} files in {folder.Path}");
 
             Dictionary<string, DateTime>? existing = null;
@@ -459,6 +459,21 @@ public class BackupService : BackgroundService
         if (_excludedFiles.Contains(filePath)) return;
         if (!File.Exists(filePath)) return;
 
+        if (IsFileLocked(filePath))
+        {
+            lock (_retryQueue) _retryQueue.Enqueue(filePath);
+            _logger.LogInformation("File in use, queued for retry: {File}", filename);
+            _logDb.Insert(new SyncLogEntry
+            {
+                Timestamp = DateTime.Now.ToString("o"),
+                Level = (int)RPMC_Backup.Shared.LogLevel.Warn,
+                Folder = folder,
+                Filename = filename,
+                Message = "Archivo en uso, se reintentará automáticamente."
+            });
+            return;
+        }
+
         try
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -486,16 +501,10 @@ public class BackupService : BackgroundService
                 DurationMs = (int)sw.ElapsedMilliseconds,
                 Message = $"Uploaded {FormatBytes(bytes)} ({sw.ElapsedMilliseconds}ms)"
             });
-            if (_status == ServiceStatus.Degraded)
-            {
-                _status = ServiceStatus.Running;
-                LogSystem(0, "Servicio recuperado tras estado de Atención.");
-            }
         }
         catch (Exception ex)
         {
             _errors24h++;
-            _status = ServiceStatus.Degraded;
             _logger.LogWarning(ex, "Upload failed: {File}", filename);
 
             _logDb.Insert(new SyncLogEntry
@@ -509,6 +518,19 @@ public class BackupService : BackgroundService
                 ErrorDetail = ex.ToString(),
                 Suggestion = GetSuggestion(ex)
             });
+        }
+    }
+
+    private static bool IsFileLocked(string filePath)
+    {
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return false;
+        }
+        catch (IOException)
+        {
+            return true;
         }
     }
 
@@ -529,8 +551,7 @@ public class BackupService : BackgroundService
             {
                 if (ct.IsCancellationRequested) return;
                 if (new FileInfo(file).Length == 0) continue;
-                var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
-                if (shouldExclude) continue;
+                if (IsExcluded(file, folder.ExcludePatterns)) continue;
                 if (_lastSyncTime > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
                 fileList.Add((folder.Path, file));
             }
@@ -624,8 +645,7 @@ public class BackupService : BackgroundService
                     {
                         if (ct.IsCancellationRequested) return;
                         if (new FileInfo(file).Length == 0) continue;
-                        var shouldExclude = folder.ExcludePatterns.Any(p => Path.GetExtension(file).Equals(p.TrimStart('*'), StringComparison.OrdinalIgnoreCase));
-                        if (shouldExclude) continue;
+                        if (IsExcluded(file, folder.ExcludePatterns)) continue;
                         if (_lastSyncTime > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
                         fileList.Add((folder.Path, file));
                     }
@@ -668,6 +688,36 @@ public class BackupService : BackgroundService
         int order = 0;
         while (len >= 1024 && order < sizes.Length - 1) { order++; len /= 1024; }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    private static bool IsExcluded(string filePath, List<string> excludePatterns)
+    {
+        if (excludePatterns == null || excludePatterns.Count == 0) return false;
+        foreach (var pattern in excludePatterns)
+        {
+            if (string.IsNullOrEmpty(pattern)) continue;
+            if (pattern.StartsWith("*."))
+            {
+                var ext = pattern.TrimStart('*');
+                if (System.IO.Path.GetExtension(filePath).Equals(ext, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            else
+            {
+                var searchStr = "\\" + pattern.TrimEnd('\\', '/') + "\\";
+                if (filePath.IndexOf(searchStr, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+                if (filePath.EndsWith("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var remainder = filePath.Substring(filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) + pattern.Length + 1);
+                    if (remainder.Length == 0 || remainder.StartsWith("\\"))
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static string GetSuggestion(Exception ex)

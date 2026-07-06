@@ -54,6 +54,7 @@ public class MinioUploader
             }
 
             var contentType = GetContentType(filePath);
+
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             if (fs.Length == 0) return;
 
