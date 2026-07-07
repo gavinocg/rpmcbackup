@@ -630,13 +630,16 @@ public class BackupService : BackgroundService
 
     private async Task SyncLoopAsync(CancellationToken ct)
     {
+        var firstRun = true;
         while (!ct.IsCancellationRequested)
         {
             try
             {
                 var cfg = _config.Load();
                 var intervalMs = cfg?.WatcherDebounceMs ?? 180000;
-                await Task.Delay(intervalMs, ct);
+                await Task.Delay(firstRun ? 5000 : intervalMs, ct);
+                firstRun = false;
+
                 if (_status != ServiceStatus.Running || _watcher == null || _uploader == null) continue;
 
                 var config = _config.Load();
