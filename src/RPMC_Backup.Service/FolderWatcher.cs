@@ -12,13 +12,15 @@ public class FolderWatcher : IDisposable
     private readonly Func<string, string, Task> _onChange;
     private readonly Action<int>? _onBatchStart;
     private readonly Action? _onBatchComplete;
+    private readonly int _debounceMs;
     private bool _running;
 
-    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null)
+    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null, int debounceMs = 180000)
     {
         _onChange = onChange;
         _onBatchStart = onBatchStart;
         _onBatchComplete = onBatchComplete;
+        _debounceMs = debounceMs;
         foreach (var folder in folders)
         {
             if (!Directory.Exists(folder.Path))
@@ -63,7 +65,7 @@ public class FolderWatcher : IDisposable
         {
             _pending[e.FullPath] = DateTime.UtcNow;
         }
-        _debounceTimer?.Change(2000, Timeout.Infinite);
+        _debounceTimer?.Change(_debounceMs, Timeout.Infinite);
     }
 
     private void OnWatcherError(object sender, ErrorEventArgs e)

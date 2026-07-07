@@ -26,6 +26,7 @@ public class AppConfig
     [JsonPropertyName("force_sync")] public bool ForceSync { get; set; }
     [JsonPropertyName("excluded_files")] public List<string> ExcludedFiles { get; set; } = new();
     [JsonPropertyName("s3_region")] public string S3Region { get; set; } = "us-east-1";
+    [JsonPropertyName("watcher_debounce_ms")] public int WatcherDebounceMs { get; set; } = 180000;
 }
 
 public class FolderConfig

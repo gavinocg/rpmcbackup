@@ -34,6 +34,8 @@ public class MainForm : Form
     private DataGridView _sysLogGrid;
     private ComboBox _cmbSysLogLevel;
     private CheckBox _chkConnSsl;
+    private NumericUpDown _numDebounce;
+    private ComboBox _cmbDebounceUnit;
     private Button _btnConnTest;
     private Label _lblConnResult;
     private TextBox _txtSmtpHost, _txtSmtpPort, _txtSmtpUser, _txtSmtpPass, _txtSmtpFrom, _txtAdminEmailConfig;
@@ -123,7 +125,7 @@ public class MainForm : Form
         _btnStop.Click += (s, e) => { SendIpc(Constants.CmdStop); RefreshStatus(); };
         statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblErrors, _btnStop });
 
-        var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 295) };
+        var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 325) };
         var lblEp = new Label { Text = "Endpoint:", Location = new Point(15, 25), AutoSize = true };
         var lblAk = new Label { Text = "Access Key:", Location = new Point(15, 55), AutoSize = true };
         var lblSk = new Label { Text = "Secret Key:", Location = new Point(15, 85), AutoSize = true };
@@ -139,6 +141,11 @@ public class MainForm : Form
         _chkConnSsl = new CheckBox { Text = "Usar SSL (HTTPS)", Location = new Point(120, 200), AutoSize = true };
         _btnConnTest = new Button { Location = new Point(120, 220), Size = new Size(130, 28), Text = "Probar Conexión" };
         _lblConnResult = new Label { Location = new Point(260, 255), AutoSize = true };
+        var lblDebounce = new Label { Text = "Intervalo de sincronización:", Location = new Point(15, 260), AutoSize = true };
+        _numDebounce = new NumericUpDown { Location = new Point(170, 257), Width = 70, Minimum = 1, Maximum = 3600, Value = 3 };
+        _cmbDebounceUnit = new ComboBox { Location = new Point(250, 257), Width = 100, DropDownStyle = ComboBoxStyle.DropDownList };
+        _cmbDebounceUnit.Items.AddRange(new[] { "Segundos", "Minutos", "Horas" });
+        _cmbDebounceUnit.SelectedIndex = 1;
         _btnConnTest.Click += async (s, e) =>
         {
             _btnConnTest.Enabled = false;
@@ -171,7 +178,7 @@ public class MainForm : Form
         };
         groupInfo.Controls.AddRange(new Control[] { lblEp, lblAk, lblSk, lblBk, lblRg, lblMc,
             _txtConnEndpoint, _txtConnAccessKey, _txtConnSecretKey, _cmbConnBucket, _txtConnRegion, _txtConnMachineName,
-            _chkConnSsl, _btnConnTest, _lblConnResult
+            _chkConnSsl, _btnConnTest, _lblConnResult, lblDebounce, _numDebounce, _cmbDebounceUnit
         });
 
         var btnSave = new Button { Text = "Guardar Cambios", Size = new Size(130, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
@@ -188,6 +195,12 @@ public class MainForm : Form
             cfg.BucketName = _cmbConnBucket.Text;
             cfg.MachineName = _txtConnMachineName.Text;
             cfg.S3Region = _txtConnRegion.Text;
+            cfg.WatcherDebounceMs = (int)_numDebounce.Value * (_cmbDebounceUnit.Text switch
+            {
+                "Horas" => 3600000,
+                "Minutos" => 60000,
+                _ => 1000
+            });
             SaveConfig(cfg);
             SendIpc(Constants.CmdReconfig);
             MessageBox.Show("Configuración guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -669,6 +682,24 @@ public class MainForm : Form
         _cmbConnBucket.Text = cfg.BucketName;
         _txtConnMachineName.Text = cfg.MachineName;
         _txtConnRegion.Text = cfg.S3Region;
+        if (cfg.WatcherDebounceMs > 0)
+        {
+            if (cfg.WatcherDebounceMs >= 3600000 && cfg.WatcherDebounceMs % 3600000 == 0)
+            {
+                _numDebounce.Value = cfg.WatcherDebounceMs / 3600000;
+                _cmbDebounceUnit.SelectedIndex = 2;
+            }
+            else if (cfg.WatcherDebounceMs >= 60000 && cfg.WatcherDebounceMs % 60000 == 0)
+            {
+                _numDebounce.Value = cfg.WatcherDebounceMs / 60000;
+                _cmbDebounceUnit.SelectedIndex = 1;
+            }
+            else
+            {
+                _numDebounce.Value = cfg.WatcherDebounceMs / 1000;
+                _cmbDebounceUnit.SelectedIndex = 0;
+            }
+        }
     }
 
     private void LoadSmtpConfig()
