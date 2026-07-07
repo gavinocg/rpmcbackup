@@ -21,7 +21,7 @@ public class TrayApplicationContext : ApplicationContext
         _icons = GenerateIcons();
 
         _menu = new ContextMenuStrip();
-        _menu.Items.Add("Abrir Configuración", null, (s, e) => RunWithPasswordLaunchConfig());
+        _menu.Items.Add("Abrir Configuración", null, (s, e) => LaunchConfig());
         _menu.Items.Add("Sincronizar ahora", null, (s, e) => SendIpc(Constants.CmdSyncNow));
         _toggleItem = new ToolStripMenuItem("Pausar respaldo");
         _toggleItem.Click += (s, e) =>
@@ -42,7 +42,7 @@ public class TrayApplicationContext : ApplicationContext
             Visible = true,
             Icon = _icons[ServiceStatus.Unknown]
         };
-        _trayIcon.DoubleClick += (s, e) => RunWithPasswordLaunchConfig();
+        _trayIcon.DoubleClick += (s, e) => LaunchConfig();
 
         TryStartService();
 
@@ -153,16 +153,13 @@ public class TrayApplicationContext : ApplicationContext
         catch { }
     }
 
-    private void RunWithPasswordLaunchConfig()
+    private static void LaunchConfig()
     {
-        if (!PromptAdminPassword("Abrir Configuración"))
-            return;
         try
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = Environment.ProcessPath ?? "RPMC_Backup.Config.exe",
-                Arguments = "--from-tray",
                 UseShellExecute = true
             });
         }
