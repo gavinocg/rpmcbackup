@@ -635,20 +635,12 @@ public class BackupService : BackgroundService
             try
             {
                 var cfg = _config.Load();
-                var delay = cfg?.SyncInterval ?? 5;
-                var unit = cfg?.SyncIntervalUnit ?? "minutos";
-                var interval = unit switch
-                {
-                    "horas" => TimeSpan.FromHours(delay),
-                    "días" => TimeSpan.FromDays(delay),
-                    _ => TimeSpan.FromMinutes(delay)
-                };
-                await Task.Delay(interval, ct);
+                var intervalMs = cfg?.WatcherDebounceMs ?? 180000;
+                await Task.Delay(intervalMs, ct);
                 if (_status != ServiceStatus.Running || _watcher == null || _uploader == null) continue;
 
                 var config = _config.Load();
                 if (config == null) continue;
-                if (!config.ForceSync) continue;
 
                 _logger.LogInformation("Starting scheduled sync...");
 
