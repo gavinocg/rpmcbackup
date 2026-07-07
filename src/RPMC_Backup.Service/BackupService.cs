@@ -120,6 +120,8 @@ public class BackupService : BackgroundService
                     _ = Task.Run(async () => await RunInitialFullSync(config, stoppingToken), stoppingToken);
                 }
 
+                _ = LightweightSyncAsync(stoppingToken);
+
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await Task.Delay(5000, stoppingToken);
@@ -624,6 +626,77 @@ public class BackupService : BackgroundService
             }
             catch (OperationCanceledException) { break; }
             catch { }
+        }
+    }
+
+    private async Task LightweightSyncAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var cfg = _config.Load();
+                var intervalMs = cfg?.LightweightSyncIntervalMs ?? 21600000;
+                await Task.Delay(intervalMs, ct);
+                if (_status != ServiceStatus.Running || _uploader == null) continue;
+
+                var config = _config.Load();
+                if (config == null) continue;
+
+                _logger.LogInformation("Lightweight sync: comparing source vs bucket...");
+                _isVerifying = true;
+
+                var prefix = $"{config.MachineName}/{config.MachineUserName}/";
+                var totalUploaded = 0;
+
+                foreach (var folder in config.Folders ?? new())
+                {
+                    if (!Directory.Exists(folder.Path) || ct.IsCancellationRequested) continue;
+
+                    var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
+                    var folderPrefix = $"{prefix}{folderName}/";
+
+                    Dictionary<string, DateTime>? existing = null;
+                    try
+                    {
+                        existing = await _uploader.ListExistingObjectsAsync(folderPrefix, ct);
+                    }
+                    catch
+                    {
+                        _logger.LogWarning("Lightweight sync: could not list bucket for {Folder}", folderName);
+                    }
+
+                    var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                    var localFiles = Directory.GetFiles(folder.Path, "*", searchOpt)
+                        .Where(f => !IsExcluded(f, folder.ExcludePatterns) && new FileInfo(f).Length > 0);
+
+                    foreach (var file in localFiles)
+                    {
+                        if (ct.IsCancellationRequested) break;
+
+                        var relPath = file.Substring(folder.Path.TrimEnd('\\', '/').Length).TrimStart('\\', '/').Replace('\\', '/');
+                        var s3Key = $"{prefix}{folderName}/{relPath}";
+
+                        if (existing != null && existing.TryGetValue(s3Key, out var bucketTs))
+                        {
+                            var localTs = File.GetLastWriteTimeUtc(file);
+                            if (localTs <= bucketTs) continue;
+                        }
+
+                        await OnFileChanged(folder.Path, file, ct);
+                        totalUploaded++;
+                    }
+                }
+
+                _isVerifying = false;
+                _logger.LogInformation("Lightweight sync completed: {Count} files uploaded.", totalUploaded);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lightweight sync error");
+                _isVerifying = false;
+            }
         }
     }
 

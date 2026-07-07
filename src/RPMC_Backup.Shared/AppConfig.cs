@@ -27,6 +27,7 @@ public class AppConfig
     [JsonPropertyName("excluded_files")] public List<string> ExcludedFiles { get; set; } = new();
     [JsonPropertyName("s3_region")] public string S3Region { get; set; } = "us-east-1";
     [JsonPropertyName("watcher_debounce_ms")] public int WatcherDebounceMs { get; set; } = 180000;
+    [JsonPropertyName("lightweight_sync_interval_ms")] public int LightweightSyncIntervalMs { get; set; } = 21600000; // 6 horas
 }
 
 public class FolderConfig
