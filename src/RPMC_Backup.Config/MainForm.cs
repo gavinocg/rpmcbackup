@@ -727,17 +727,7 @@ public class MainForm : Form
 
         if (!isTray)
         {
-            try
-            {
-                var psi = new ProcessStartInfo("sc", "start rpmc-backup-service")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                var p = Process.Start(psi);
-                p?.WaitForExit(3000);
-            }
-            catch { }
+            _closingToTray = false;
         }
         _statusTimer = new System.Windows.Forms.Timer { Interval = Constants.TrayPollIntervalMs };
         _statusTimer.Tick += async (s, ev) => await Task.Run(() => RefreshStatus());

@@ -44,6 +44,9 @@ Name: "{commondesktop}\RPMC Backup"; Filename: "{app}\{#ConfigExe}"; IconFilenam
 Name: "{group}\RPMC Backup Config"; Filename: "{app}\{#ConfigExe}"; IconFilename: "{app}\icon.ico"
 Name: "{group}\Desinstalar RPMC Backup"; Filename: "{uninstallexe}"; IconFilename: "{app}\icon.ico"
 
+[Run]
+Filename: "{app}\{#ConfigExe}"; Flags: runasoriginaluser nowait postinstall; Description: "Abrir RPMC Backup Config"
+
 [UninstallRun]
 Filename: "{sys}\sc.exe"; Parameters: "stop rpmc-backup-service"; Flags: runhidden; StatusMsg: "Deteniendo servicio..."
 Filename: "{sys}\sc.exe"; Parameters: "delete rpmc-backup-service"; Flags: runhidden; StatusMsg: "Eliminando servicio..."
@@ -131,10 +134,17 @@ begin
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+procedure RegisterAutoStart;
+begin
+  RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+    'RPMC Backup', ExpandConstant('"{app}\{#ConfigExe}" --tray'));
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    RegisterAutoStart;
     StartService;
   end;
 end;

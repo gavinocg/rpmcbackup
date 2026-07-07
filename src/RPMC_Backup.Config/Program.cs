@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Principal;
 using RPMC_Backup.Config;
 
 Application.ThreadException += (s, e) =>
@@ -80,39 +79,6 @@ if (cmdArgs.Length > 1 && cmdArgs[1] == "--tray")
     return;
 }
 
-if (cmdArgs.Length > 1 && cmdArgs[1] == "--elevated")
-{
-    ApplicationConfiguration.Initialize();
-    var form = new MainForm();
-    var configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RPMC\\Backup", "config.dat");
-    if (File.Exists(configPath))
-        form.WindowState = FormWindowState.Minimized;
-    Application.Run(form);
-    return;
-}
-
-if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
-{
-    try
-    {
-        var elevatedArg = "--elevated";
-        if (cmdArgs.Length > 1 && cmdArgs[1] == "--minimized")
-            elevatedArg = "--minimized";
-        var psi = new ProcessStartInfo
-        {
-            FileName = Environment.ProcessPath,
-            Arguments = elevatedArg,
-            Verb = "runas",
-            UseShellExecute = true
-        };
-        Process.Start(psi);
-    }
-    catch { }
-    return;
-}
-
 ApplicationConfiguration.Initialize();
 var mainForm = new MainForm();
-if (cmdArgs.Length > 1 && cmdArgs[1] == "--minimized")
-    mainForm.WindowState = FormWindowState.Minimized;
 Application.Run(mainForm);
