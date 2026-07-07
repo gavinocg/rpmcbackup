@@ -52,9 +52,6 @@ Filename: "{sys}\sc.exe"; Parameters: "stop rpmc-backup-service"; Flags: runhidd
 Filename: "{sys}\sc.exe"; Parameters: "delete rpmc-backup-service"; Flags: runhidden; StatusMsg: "Eliminando servicio..."
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im {#ConfigExe}"; Flags: runhidden; StatusMsg: "Cerrando aplicación..."
 
-[Services]
-Name: rpmc-backup-service; DisplayName: "RPMC Backup Service"; Description: "Servicio de respaldo automático a MinIO AIStor"; ImagePath: "{app}\service\{#ServiceExe}"; StartType: auto
-
 [Code]
 var
   ConfigFile: String;
@@ -84,12 +81,14 @@ begin
   if CurUninstallStep = usPostUninstall then
   begin
     DelTree(ExpandConstant('{commonappdata}\RPMC\Backup'), True, True, True);
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'RPMC Backup');
   end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopService;
+  RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'RPMC Backup');
   Result := '';
 end;
 
@@ -144,6 +143,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    RegisterService;
     RegisterAutoStart;
     StartService;
   end;

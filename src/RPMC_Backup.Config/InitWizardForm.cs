@@ -425,59 +425,59 @@ public class InitWizardForm : Form
     private static void EnsureServiceRunning()
     {
         var serviceName = Constants.ServiceName;
-        try
-        {
-            using var svc = new System.ServiceProcess.ServiceController(serviceName);
-            if (svc.Status == System.ServiceProcess.ServiceControllerStatus.Stopped)
-            {
-                svc.Start();
-                svc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(15));
-            }
-            return;
-        }
-        catch (InvalidOperationException)
-        {
-            // Service doesn't exist - create it
-        }
-
         var serviceDir = System.IO.Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "service", "RPMC_Backup.Service.exe");
         if (!File.Exists(serviceDir))
         {
-            // Try relative to executable
             serviceDir = System.IO.Path.Combine(
                 System.IO.Path.GetDirectoryName(Application.ExecutablePath) ?? "",
                 "service", "RPMC_Backup.Service.exe");
         }
         if (!File.Exists(serviceDir)) return;
 
-        using var scProcess = new Process
+        try
         {
-            StartInfo = new ProcessStartInfo
+            using var svc = new System.ServiceProcess.ServiceController(serviceName);
+            if (svc.Status == System.ServiceProcess.ServiceControllerStatus.Stopped)
             {
-                FileName = "sc",
-                Arguments = $"create {serviceName} binPath=\"{serviceDir}\" start=auto DisplayName=\"RPMC Backup Service\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
+                svc.Start();
+                svc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
             }
-        };
-        scProcess.Start();
-        scProcess.WaitForExit(10000);
-
-        if (scProcess.ExitCode == 0)
-        {
-            using var startProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "sc",
-                    Arguments = $"start {serviceName}",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-            startProcess.Start();
-            startProcess.WaitForExit(5000);
+            return;
         }
+        catch (InvalidOperationException)
+        {
+            // Service doesn't exist - create it with elevation
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // Access denied starting service - will try via elevated sc
+        }
+
+        // Create service with elevation
+        var createPsi = new ProcessStartInfo
+        {
+            FileName = "sc",
+            Arguments = $"create {serviceName} binPath=\"{serviceDir}\" start=auto DisplayName=\"RPMC Backup Service\"",
+            Verb = "runas",
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        using var createProcess = Process.Start(createPsi);
+        createProcess?.WaitForExit(30000);
+
+        // Start service with elevation
+        var startPsi = new ProcessStartInfo
+        {
+            FileName = "sc",
+            Arguments = $"start {serviceName}",
+            Verb = "runas",
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        using var startProcess = Process.Start(startPsi);
+        startProcess?.WaitForExit(30000);
     }
 }
