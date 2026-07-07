@@ -60,6 +60,7 @@ public class ServiceStateInfo
     public int SyncProgress { get; set; }
     public string DataError { get; set; } = string.Empty;
     public string ConnectionError { get; set; } = string.Empty;
+    public string NextSyncTime { get; set; } = string.Empty;
     public List<FolderProgress> FoldersProgress { get; set; } = new();
 }
 

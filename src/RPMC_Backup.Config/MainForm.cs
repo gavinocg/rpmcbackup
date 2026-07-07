@@ -16,7 +16,7 @@ public class MainForm : Form
     private NotifyIcon _trayIcon;
     private ContextMenuStrip _trayMenu;
     private System.Windows.Forms.Timer _statusTimer;
-    private Label _lblServiceStatus, _lblLastSync, _lblErrors, _lblPending;
+    private Label _lblServiceStatus, _lblLastSync, _lblErrors, _lblPending, _lblNextSync;
     private Button _btnStop, _btnSalir;
     private ListView _foldersList;
     private Button _btnAddFolder, _btnRemoveFolder;
@@ -116,11 +116,12 @@ public class MainForm : Form
 
     private void CreateParametrosTab()
     {
-        var statusGroup = new GroupBox { Text = "Estado del servicio", Location = new Point(15, 10), Size = new Size(850, 65) };
+        var statusGroup = new GroupBox { Text = "Estado del servicio", Location = new Point(15, 10), Size = new Size(850, 80) };
         _statusIndicator = new Panel { Location = new Point(15, 20), Size = new Size(14, 14) };
         _lblServiceStatus = new Label { Location = new Point(35, 18), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         _lblPending = new Label { Location = new Point(220, 18), AutoSize = true, ForeColor = Color.Gray };
         _lblLastSync = new Label { Location = new Point(35, 38), AutoSize = true, ForeColor = Color.Gray };
+        _lblNextSync = new Label { Location = new Point(35, 52), AutoSize = true, ForeColor = Color.Gray };
         _lblErrors = new Label { Location = new Point(430, 18), AutoSize = true, ForeColor = Color.Gray };
         _btnStop = new Button { Location = new Point(630, 15), Size = new Size(65, 22), Text = "Detener" };
         _btnStop.Click += (s, e) =>
@@ -133,7 +134,7 @@ public class MainForm : Form
         };
         _btnSalir = new Button { Location = new Point(705, 15), Size = new Size(60, 22), Text = "Salir" };
         _btnSalir.Click += (s, e) => { SendIpc(Constants.CmdStop); _closingToTray = false; Close(); };
-        statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblErrors, _btnStop, _btnSalir });
+        statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblNextSync, _lblErrors, _btnStop, _btnSalir });
 
         var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 325) };
         var lblEp = new Label { Text = "Endpoint:", Location = new Point(15, 25), AutoSize = true };
@@ -815,6 +816,7 @@ public class MainForm : Form
             _lblServiceStatus.Text = info.LabelText;
             _trayIcon.Text = info.TrayText;
             _lblLastSync.Text = !string.IsNullOrEmpty(state.LastSyncTime) ? $"Última sincronización: {state.LastSyncTime}" : "Sin sincronizaciones";
+            _lblNextSync.Text = !string.IsNullOrEmpty(state.NextSyncTime) ? $"Próxima sinc. programada: {state.NextSyncTime}" : "";
             _lblErrors.Text = state.Errors24h >= 0 ? $"Errores (24h): {state.Errors24h}" : "Servicio no disponible";
             _lblPending.Text = $"Archivos encolados: {state.PendingFiles} | Total: {FormatBytes(state.TotalBytesUploaded)} ({state.TotalFilesUploaded} archivos)";
             _btnStop.Text = state.Status == ServiceStatus.Stopped ? "Iniciar" : "Detener";

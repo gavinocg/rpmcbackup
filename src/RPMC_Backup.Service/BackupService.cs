@@ -23,6 +23,7 @@ public class BackupService : BackgroundService
     private long _totalBytes;
     private int _totalFiles;
     private DateTime _lastSyncTime = DateTime.MinValue;
+    private DateTime _nextLightweightSync = DateTime.MinValue;
     private readonly Queue<string> _retryQueue = new();
     private volatile bool _isSyncing;
     private volatile bool _isVerifying;
@@ -49,6 +50,7 @@ public class BackupService : BackgroundService
             IsSyncing = _isSyncing,
             IsVerifying = _isVerifying,
             SyncProgress = _syncTotal > 0 ? Math.Min((int)(100.0 * _syncCompleted / _syncTotal), 100) : (_isSyncing ? 0 : 100),
+            NextSyncTime = _nextLightweightSync > DateTime.MinValue ? _nextLightweightSync.ToString("yyyy-MM-dd HH:mm:ss") : "",
             DataError = _dataError,
             ConnectionError = _connectionError,
             FoldersProgress = _folderTotal.Select(kv => new FolderProgress
@@ -637,6 +639,7 @@ public class BackupService : BackgroundService
             {
                 var cfg = _config.Load();
                 var intervalMs = cfg?.LightweightSyncIntervalMs ?? 21600000;
+                _nextLightweightSync = DateTime.UtcNow.AddMilliseconds(intervalMs);
                 await Task.Delay(intervalMs, ct);
                 if (_status != ServiceStatus.Running || _uploader == null) continue;
 
