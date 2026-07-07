@@ -138,6 +138,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (!PromptAdminPassword(action))
             return;
+        SendIpc(Constants.CmdStop);
         Application.Exit();
     }
 

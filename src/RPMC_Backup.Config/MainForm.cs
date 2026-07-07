@@ -74,6 +74,7 @@ public class MainForm : Form
         _trayMenu.Items.Add("Salir", null, (s, e) => {
             if (PromptAdminPassword("Salir del aplicativo"))
             {
+                SendIpc(Constants.CmdStop);
                 _closingToTray = false;
                 Application.Exit();
             }
@@ -131,7 +132,7 @@ public class MainForm : Form
             RefreshStatus();
         };
         _btnSalir = new Button { Location = new Point(705, 15), Size = new Size(60, 22), Text = "Salir" };
-        _btnSalir.Click += (s, e) => { _closingToTray = false; Close(); };
+        _btnSalir.Click += (s, e) => { SendIpc(Constants.CmdStop); _closingToTray = false; Close(); };
         statusGroup.Controls.AddRange(new Control[] { _statusIndicator, _lblServiceStatus, _lblPending, _lblLastSync, _lblErrors, _btnStop, _btnSalir });
 
         var groupInfo = new GroupBox { Text = "Configuración del servidor S3", Location = new Point(15, 85), Size = new Size(850, 325) };
