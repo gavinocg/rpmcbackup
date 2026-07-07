@@ -374,6 +374,9 @@ public class InitWizardForm : Form
                     }
                     catch { }
 
+                    // Ensure service exists and start it
+                    try { EnsureServiceRunning(); } catch { }
+
                     // Launch tray (will start the service automatically)
                     try
                     {
@@ -416,6 +419,65 @@ public class InitWizardForm : Form
                     _btnNext.Enabled = true;
                 }
                 break;
+        }
+    }
+
+    private static void EnsureServiceRunning()
+    {
+        var serviceName = Constants.ServiceName;
+        try
+        {
+            using var svc = new System.ServiceProcess.ServiceController(serviceName);
+            if (svc.Status == System.ServiceProcess.ServiceControllerStatus.Stopped)
+            {
+                svc.Start();
+                svc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(15));
+            }
+            return;
+        }
+        catch (InvalidOperationException)
+        {
+            // Service doesn't exist - create it
+        }
+
+        var serviceDir = System.IO.Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "service", "RPMC_Backup.Service.exe");
+        if (!File.Exists(serviceDir))
+        {
+            // Try relative to executable
+            serviceDir = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(Application.ExecutablePath) ?? "",
+                "service", "RPMC_Backup.Service.exe");
+        }
+        if (!File.Exists(serviceDir)) return;
+
+        using var scProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "sc",
+                Arguments = $"create {serviceName} binPath=\"{serviceDir}\" start=auto DisplayName=\"RPMC Backup Service\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        scProcess.Start();
+        scProcess.WaitForExit(10000);
+
+        if (scProcess.ExitCode == 0)
+        {
+            using var startProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "sc",
+                    Arguments = $"start {serviceName}",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            startProcess.Start();
+            startProcess.WaitForExit(5000);
         }
     }
 }
