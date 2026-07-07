@@ -74,8 +74,33 @@ if (cmdArgs.Length > 1 && cmdArgs[1] == "--install-service")
 
 if (cmdArgs.Length > 1 && cmdArgs[1] == "--tray")
 {
+    Mutex? trayMutex;
+    try
+    {
+        trayMutex = new Mutex(true, "Global\\RPMC_Backup_Tray", out var createdNew);
+        if (!createdNew)
+        {
+            trayMutex.Dispose();
+            MessageBox.Show(
+                "RPMC Backup ya se encuentra iniciado en la bandeja del sistema (system tray).\n\n" +
+                "Haga clic en el icono de la bandeja para abrir la configuración.",
+                "RPMC Backup",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+    }
+    catch { trayMutex = null; }
+
     ApplicationConfiguration.Initialize();
-    Application.Run(new TrayApplicationContext());
+    try
+    {
+        Application.Run(new TrayApplicationContext());
+    }
+    finally
+    {
+        trayMutex?.ReleaseMutex();
+        trayMutex?.Dispose();
+    }
     return;
 }
 
