@@ -497,7 +497,7 @@ public class BackupService : BackgroundService
 
             var cfg = _config.Load();
             var folderName = Path.GetFileName(folder.TrimEnd('\\', '/'));
-            var relativePath = filename.Replace(folder, "").TrimStart('\\', '/');
+            var relativePath = filename.Substring(folder.TrimEnd('\\', '/').Length).TrimStart('\\', '/');
             var objectName = $"{cfg?.MachineName ?? "unknown"}/{cfg?.MachineUserName ?? "unknown"}/{folderName}/{relativePath.Replace('\\', '/')}";
             var bytes = new FileInfo(filePath).Length;
 
