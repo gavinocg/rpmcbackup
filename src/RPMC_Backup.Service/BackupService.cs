@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
@@ -77,7 +77,7 @@ public class BackupService : BackgroundService
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("RPMC Backup Service stopping...");
-        LogSystem(0, "Servicio deteniéndose...");
+        LogSystem(0, "Servicio deteniÃ©ndose...");
         _watcher?.Dispose();
         await base.StopAsync(cancellationToken);
     }
@@ -85,7 +85,6 @@ public class BackupService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _ = StartIpcServerAsync(stoppingToken);
-        _ = SyncLoopAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -140,7 +139,7 @@ public class BackupService : BackgroundService
                     }
                     else if (_dataError.Length > 0)
                     {
-                        LogSystem(2, $"Orígenes restaurados: todos los directorios están accesibles nuevamente.");
+                        LogSystem(2, $"OrÃ­genes restaurados: todos los directorios estÃ¡n accesibles nuevamente.");
                         _dataError = string.Empty;
                     }
 
@@ -154,7 +153,7 @@ public class BackupService : BackgroundService
                             var resp = await _hc.GetAsync($"{protocol}://{current.MinioEndpoint}/", cts.Token);
                             if (_connectionError.Length > 0)
                             {
-                                LogSystem(2, $"Conexión con el servidor S3 restaurada.");
+                                LogSystem(2, $"ConexiÃ³n con el servidor S3 restaurada.");
                                 _connectionError = string.Empty;
                             }
                         }
@@ -392,13 +391,13 @@ public class BackupService : BackgroundService
                     _watcher = new FolderWatcher(c.Folders, async (f, fn) => await OnFileChanged(f, fn, CancellationToken.None), batchSize => OnBatchStart(batchSize), () => _isSyncing = false, c.WatcherDebounceMs);
                     _watcher.Start();
                     _ = Task.Run(async () => await RunInitialFullSync(c, CancellationToken.None));
-                    LogSystem(0, "Configuración recargada.");
+                    LogSystem(0, "ConfiguraciÃ³n recargada.");
                 }
                 return new IpcResponse { Success = true, Message = "Configuration reloaded" };
 
             case Constants.CmdSyncNow:
                 _ = Task.Run(async () => await RunSyncNowAsync(CancellationToken.None));
-                LogSystem(0, "Sincronización manual solicitada.");
+                LogSystem(0, "SincronizaciÃ³n manual solicitada.");
                 return new IpcResponse { Success = true, Message = "Sync started" };
 
             case Constants.CmdClearLogs:
@@ -486,7 +485,7 @@ public class BackupService : BackgroundService
                 Level = (int)RPMC_Backup.Shared.LogLevel.Warn,
                 Folder = folder,
                 Filename = filename,
-                Message = "Archivo en uso, se reintentará automáticamente."
+                Message = "Archivo en uso, se reintentarÃ¡ automÃ¡ticamente."
             });
             return;
         }
@@ -600,7 +599,7 @@ public class BackupService : BackgroundService
             if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
         }
         _isSyncing = false;
-        LogSystem(0, $"Sincronización manual completada: {_syncCompleted} archivos.");
+        LogSystem(0, $"SincronizaciÃ³n manual completada: {_syncCompleted} archivos.");
         _logger.LogInformation($"Manual sync completed: {_syncCompleted} files.");
     }
 
@@ -625,71 +624,6 @@ public class BackupService : BackgroundService
             }
             catch (OperationCanceledException) { break; }
             catch { }
-        }
-    }
-
-    private async Task SyncLoopAsync(CancellationToken ct)
-    {
-        var firstRun = true;
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                var cfg = _config.Load();
-                var intervalMs = cfg?.WatcherDebounceMs ?? 180000;
-                await Task.Delay(firstRun ? 5000 : intervalMs, ct);
-                firstRun = false;
-
-                if (_status != ServiceStatus.Running || _watcher == null || _uploader == null) { firstRun = true; continue; }
-
-                var config = _config.Load();
-                if (config == null) continue;
-
-                _logger.LogInformation("Starting scheduled sync...");
-
-                var cutoff = _lastSyncTime > DateTime.MinValue ? _lastSyncTime : DateTime.MinValue;
-                var fileList = new List<(string folder, string file)>();
-                foreach (var folder in config.Folders ?? new())
-                {
-                    if (!Directory.Exists(folder.Path)) continue;
-                    var files = Directory.GetFiles(folder.Path, "*", folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-                    foreach (var file in files)
-                    {
-                        if (ct.IsCancellationRequested) return;
-                        if (new FileInfo(file).Length == 0) continue;
-                        if (IsExcluded(file, folder.ExcludePatterns)) continue;
-                        if (_lastSyncTime > DateTime.MinValue && File.GetLastWriteTimeUtc(file) <= cutoff.ToUniversalTime()) continue;
-                        fileList.Add((folder.Path, file));
-                    }
-                }
-
-                if (fileList.Count == 0) { _logger.LogInformation("Scheduled sync: no new files to sync."); continue; }
-
-                _isSyncing = true;
-                _syncTotal = fileList.Count;
-                _syncCompleted = 0;
-                _folderTotal.Clear();
-                _folderCompleted.Clear();
-                foreach (var (f, _) in fileList)
-                {
-                    if (!_folderTotal.ContainsKey(f)) _folderTotal[f] = 0;
-                    _folderTotal[f]++;
-                    _folderCompleted.TryAdd(f, 0);
-                }
-
-                foreach (var (folder, file) in fileList)
-                {
-                    if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
-                    await OnFileChanged(folder, file, ct);
-                    _syncCompleted++;
-                    if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
-                }
-
-                _isSyncing = false;
-                _logger.LogInformation($"Scheduled sync completed: {_syncCompleted} files.");
-            }
-            catch (OperationCanceledException) { break; }
-            catch (Exception ex) { _logger.LogError(ex, "Sync error"); }
         }
     }
 
@@ -736,14 +670,14 @@ public class BackupService : BackgroundService
     {
         var msg = ex.Message.ToLower();
         if (msg.Contains("file is being used") || msg.Contains("file is open"))
-            return "El archivo está abierto en otro programa. Ciérrelo o agréguelo a los exclude patterns.";
+            return "El archivo estÃ¡ abierto en otro programa. CiÃ©rrelo o agrÃ©guelo a los exclude patterns.";
         if (msg.Contains("connection") || msg.Contains("timeout") || msg.Contains("network"))
-            return "Error de conexión con MinIO. Verifique que el servidor esté accesible.";
+            return "Error de conexiÃ³n con MinIO. Verifique que el servidor estÃ© accesible.";
         if (msg.Contains("access") || msg.Contains("forbidden") || msg.Contains("unauthorized"))
-            return "Credenciales de MinIO inválidas. Verifique access key y secret key.";
+            return "Credenciales de MinIO invÃ¡lidas. Verifique access key y secret key.";
         if (msg.Contains("not found") || msg.Contains("bucket"))
-            return "El bucket no existe. Verifique el nombre del bucket en la configuración.";
-        return "Error inesperado. Revise el detalle técnico para más información.";
+            return "El bucket no existe. Verifique el nombre del bucket en la configuraciÃ³n.";
+        return "Error inesperado. Revise el detalle tÃ©cnico para mÃ¡s informaciÃ³n.";
     }
 }
 
