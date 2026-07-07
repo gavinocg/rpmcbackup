@@ -12,35 +12,37 @@ public class TrayApplicationContext : ApplicationContext
     private ToolStripMenuItem _toggleItem;
     private System.Windows.Forms.Timer _statusTimer;
     private readonly System.Windows.Forms.Timer _startupRetryTimer;
-    private readonly Dictionary<ServiceStatus, Icon> _icons;
-
-    private const int CmdStart = 0, CmdStop = 1, CmdPause = 2, CmdResume = 3;
 
     public TrayApplicationContext()
     {
-        _icons = GenerateIcons();
+        StatusHelper.Initialize();
 
         _menu = new ContextMenuStrip();
         _menu.Items.Add("Abrir Configuración", null, (s, e) => LaunchConfig());
         _menu.Items.Add("Sincronizar ahora", null, (s, e) => SendIpc(Constants.CmdSyncNow));
-        _toggleItem = new ToolStripMenuItem("Pausar respaldo");
+        _toggleItem = new ToolStripMenuItem("Detener servicio");
         _toggleItem.Click += (s, e) =>
         {
-            if (_toggleItem.Text == "Pausar respaldo")
-                SendIpc(Constants.CmdPause);
+            if (_toggleItem.Text == "Detener servicio")
+            {
+                if (!PromptAdminPassword("Detener servicio")) return;
+                SendIpc(Constants.CmdStop);
+            }
             else
+            {
                 SendIpc(Constants.CmdResume);
+            }
         };
         _menu.Items.Add(_toggleItem);
         _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add("Salir", null, (s, e) => RunWithPassword("Salir del aplicativo", CmdStop));
+        _menu.Items.Add("Salir", null, (s, e) => RunWithPassword("Salir del aplicativo"));
 
         _trayIcon = new NotifyIcon
         {
             Text = "RPMC Backup",
             ContextMenuStrip = _menu,
             Visible = true,
-            Icon = _icons[ServiceStatus.Unknown]
+            Icon = StatusHelper.IconGray
         };
         _trayIcon.DoubleClick += (s, e) => LaunchConfig();
 
@@ -53,30 +55,6 @@ public class TrayApplicationContext : ApplicationContext
         _startupRetryTimer = new System.Windows.Forms.Timer { Interval = 5000 };
         _startupRetryTimer.Tick += (s, e) => TryStartService();
         _startupRetryTimer.Start();
-    }
-
-    private static Dictionary<ServiceStatus, Icon> GenerateIcons()
-    {
-        var icons = new Dictionary<ServiceStatus, Icon>();
-        foreach (var (status, color) in new[]
-        {
-            (ServiceStatus.Running, Color.Green),
-            (ServiceStatus.Paused, Color.Orange),
-            (ServiceStatus.Degraded, Color.Orange),
-            (ServiceStatus.Error, Color.Red),
-            (ServiceStatus.Stopped, Color.Red),
-            (ServiceStatus.Unknown, Color.Gray)
-        })
-        {
-            using var bmp = new Bitmap(16, 16);
-            using var g = Graphics.FromImage(bmp);
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-            g.FillEllipse(new SolidBrush(color), 1, 1, 14, 14);
-            var hIcon = bmp.GetHicon();
-            icons[status] = Icon.FromHandle(hIcon);
-        }
-        return icons;
     }
 
     private void TryStartService()
@@ -116,29 +94,19 @@ public class TrayApplicationContext : ApplicationContext
             }
         }
         catch { }
-        _trayIcon.Icon = _icons[ServiceStatus.Unknown];
+        _trayIcon.Icon = StatusHelper.IconGray;
         _trayIcon.Text = "RPMC Backup - Servicio no disponible";
     }
 
     private void UpdateTray(ServiceStateInfo state)
     {
-        var status = state.Status;
-        var icon = _icons.TryGetValue(status, out var cached) ? cached : _icons[ServiceStatus.Unknown];
-        _trayIcon.Icon = icon;
+        var info = StatusHelper.Resolve(state);
+        _trayIcon.Icon = info.Icon;
+        _trayIcon.Text = info.TrayText;
 
-        _trayIcon.Text = status switch
-        {
-            ServiceStatus.Running => state.IsSyncing ? "RPMC Backup - Sincronizando" : "RPMC Backup - Listo",
-            ServiceStatus.Paused => "RPMC Backup - Pausado",
-            ServiceStatus.Degraded => "RPMC Backup - Atención",
-            ServiceStatus.Error => "RPMC Backup - Error",
-            ServiceStatus.Stopped => "RPMC Backup - Detenido",
-            _ => "RPMC Backup"
-        };
-
-        _toggleItem.Text = status is ServiceStatus.Stopped or ServiceStatus.Paused
-            ? "Reanudar respaldo"
-            : "Pausar respaldo";
+        _toggleItem.Text = state.Status == ServiceStatus.Stopped
+            ? "Iniciar servicio"
+            : "Detener servicio";
     }
 
     private void SendIpc(string command, string payload = "")
@@ -166,13 +134,11 @@ public class TrayApplicationContext : ApplicationContext
         catch { }
     }
 
-    private void RunWithPassword(string action, int command)
+    private void RunWithPassword(string action)
     {
         if (!PromptAdminPassword(action))
             return;
-
-        if (command == CmdStop)
-            Application.Exit();
+        Application.Exit();
     }
 
     private bool PromptAdminPassword(string action)
@@ -241,8 +207,6 @@ public class TrayApplicationContext : ApplicationContext
             if (_trayIcon != null) _trayIcon.Visible = false;
             _trayIcon?.Dispose();
             _menu?.Dispose();
-            foreach (var icon in _icons.Values)
-                icon?.Dispose();
         }
         base.Dispose(disposing);
     }
