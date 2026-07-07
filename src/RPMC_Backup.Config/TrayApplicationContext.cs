@@ -99,11 +99,11 @@ public class TrayApplicationContext : ApplicationContext
     {
         try
         {
-            using var pipe = new NamedPipeClientStream(".", Constants.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            pipe.Connect(2000);
-            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            using var client = new System.Net.Sockets.TcpClient("127.0.0.1", Constants.IpcPort);
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream) { AutoFlush = true };
             writer.WriteLine(JsonSerializer.Serialize(new IpcRequest { Command = Constants.CmdGetStatus }));
-            using var reader = new StreamReader(pipe);
+            using var reader = new StreamReader(stream);
             var responseJson = reader.ReadLine();
             if (responseJson != null)
             {
@@ -145,9 +145,9 @@ public class TrayApplicationContext : ApplicationContext
     {
         try
         {
-            using var pipe = new NamedPipeClientStream(".", Constants.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            pipe.Connect(Constants.PipeConnectTimeoutMs);
-            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            using var client = new System.Net.Sockets.TcpClient("127.0.0.1", Constants.IpcPort);
+            using var stream = client.GetStream();
+            using var writer = new StreamWriter(stream) { AutoFlush = true };
             writer.WriteLine(JsonSerializer.Serialize(new IpcRequest { Command = command, Payload = payload }));
         }
         catch { }

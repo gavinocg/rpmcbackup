@@ -1,5 +1,7 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using RPMC_Backup.Shared;
@@ -315,15 +317,25 @@ public class BackupService : BackgroundService
     {
         _ = Task.Run(async () =>
         {
+            var listener = new TcpListener(IPAddress.Loopback, Constants.IpcPort);
+            try
+            {
+                listener.Start();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start IPC listener");
+                return;
+            }
+
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    using var server = new NamedPipeServerStream(Constants.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous);
-                    await server.WaitForConnectionAsync(ct);
-                    if (ct.IsCancellationRequested) break;
-                    using var reader = new StreamReader(server);
-                    using var writer = new StreamWriter(server) { AutoFlush = true };
+                    using var client = await listener.AcceptTcpClientAsync(ct);
+                    using var stream = client.GetStream();
+                    using var reader = new StreamReader(stream);
+                    using var writer = new StreamWriter(stream) { AutoFlush = true };
                     var line = await reader.ReadLineAsync(ct);
                     if (line != null)
                     {
@@ -333,8 +345,13 @@ public class BackupService : BackgroundService
                     }
                 }
                 catch (OperationCanceledException) { break; }
-                catch (Exception ex) { _logger.LogWarning(ex, "IPC error"); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "IPC error");
+                    try { await Task.Delay(1000, ct); } catch { break; }
+                }
             }
+            listener.Stop();
         }, ct);
     }
 

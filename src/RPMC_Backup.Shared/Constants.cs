@@ -7,6 +7,7 @@ public static class Constants
     public const string DisplayName = "RPMC Backup Service";
     public const string Description = "Real-time backup service for MinIO AIStor";
     public const string PipeName = "RPMCBackup";
+    public const int IpcPort = 51999;
     public const string ConfigDir = "RPMC\\Backup";
     public const string ConfigFileName = "config.dat";
     public const string LogsDbName = "logs.db";
