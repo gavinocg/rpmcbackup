@@ -30,7 +30,9 @@ public static class StatusHelper
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
         g.FillEllipse(new SolidBrush(color), 1, 1, 14, 14);
-        return Icon.FromHandle(bmp.GetHicon());
+        var hIcon = bmp.GetHicon();
+        using var temp = Icon.FromHandle(hIcon);
+        return (Icon)temp.Clone();
     }
 
     private static Icon MakePlayIcon()
@@ -40,7 +42,9 @@ public static class StatusHelper
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
         g.FillPolygon(new SolidBrush(Color.Green), new[] { new PointF(3, 2), new PointF(3, 14), new PointF(14, 8) });
-        return Icon.FromHandle(bmp.GetHicon());
+        var hIcon = bmp.GetHicon();
+        using var temp = Icon.FromHandle(hIcon);
+        return (Icon)temp.Clone();
     }
 
     public static StatusInfo Resolve(ServiceStateInfo state)

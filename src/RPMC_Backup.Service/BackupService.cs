@@ -640,7 +640,7 @@ public class BackupService : BackgroundService
                 await Task.Delay(firstRun ? 5000 : intervalMs, ct);
                 firstRun = false;
 
-                if (_status != ServiceStatus.Running || _watcher == null || _uploader == null) continue;
+                if (_status != ServiceStatus.Running || _watcher == null || _uploader == null) { firstRun = true; continue; }
 
                 var config = _config.Load();
                 if (config == null) continue;
