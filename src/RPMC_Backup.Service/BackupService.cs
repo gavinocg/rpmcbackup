@@ -633,12 +633,14 @@ public class BackupService : BackgroundService
 
     private async Task LightweightSyncAsync(CancellationToken ct)
     {
+        var firstRun = true;
         while (!ct.IsCancellationRequested)
         {
             try
             {
                 var cfg = _config.Load();
-                var intervalMs = cfg?.LightweightSyncIntervalMs ?? 21600000;
+                var intervalMs = firstRun ? 300000 : (cfg?.LightweightSyncIntervalMs ?? 21600000);
+                firstRun = false;
                 _nextLightweightSync = DateTime.UtcNow.AddMilliseconds(intervalMs);
                 await Task.Delay(intervalMs, ct);
                 if (_status != ServiceStatus.Running || _uploader == null) continue;
