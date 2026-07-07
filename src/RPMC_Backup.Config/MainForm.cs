@@ -715,7 +715,9 @@ public class MainForm : Form
         var cmdArgs = Environment.GetCommandLineArgs();
         var isTray = cmdArgs.Length > 1 && cmdArgs[1] == "--tray";
 
-        if (!isTray)
+        var isFromTray = cmdArgs.Length > 1 && cmdArgs[1] == "--from-tray";
+
+        if (!isTray && !isFromTray)
         {
             if (!PromptAdminPassword("Abrir Configuración"))
             {

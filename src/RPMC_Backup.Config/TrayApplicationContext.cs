@@ -21,7 +21,7 @@ public class TrayApplicationContext : ApplicationContext
         _icons = GenerateIcons();
 
         _menu = new ContextMenuStrip();
-        _menu.Items.Add("Abrir Configuración", null, (s, e) => RunWithPassword("Abrir Configuración", CmdStart));
+        _menu.Items.Add("Abrir Configuración", null, (s, e) => RunWithPasswordLaunchConfig());
         _menu.Items.Add("Sincronizar ahora", null, (s, e) => SendIpc(Constants.CmdSyncNow));
         _toggleItem = new ToolStripMenuItem("Pausar respaldo");
         _toggleItem.Click += (s, e) =>
@@ -42,7 +42,7 @@ public class TrayApplicationContext : ApplicationContext
             Visible = true,
             Icon = _icons[ServiceStatus.Unknown]
         };
-        _trayIcon.DoubleClick += (s, e) => RunWithPassword("Abrir Configuración", CmdStart);
+        _trayIcon.DoubleClick += (s, e) => RunWithPasswordLaunchConfig();
 
         TryStartService();
 
@@ -153,28 +153,29 @@ public class TrayApplicationContext : ApplicationContext
         catch { }
     }
 
+    private void RunWithPasswordLaunchConfig()
+    {
+        if (!PromptAdminPassword("Abrir Configuración"))
+            return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Environment.ProcessPath ?? "RPMC_Backup.Config.exe",
+                Arguments = "--from-tray",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
     private void RunWithPassword(string action, int command)
     {
         if (!PromptAdminPassword(action))
             return;
 
-        switch (command)
-        {
-            case CmdStart:
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = Environment.ProcessPath ?? "RPMC_Backup.Config.exe",
-                        UseShellExecute = true
-                    });
-                }
-                catch { }
-                break;
-            case CmdStop:
-                Application.Exit();
-                break;
-        }
+        if (command == CmdStop)
+            Application.Exit();
     }
 
     private bool PromptAdminPassword(string action)
