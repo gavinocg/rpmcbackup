@@ -98,7 +98,7 @@ public class MainForm : Form
         {
             Text = "RPMC Backup",
             ContextMenuStrip = _trayMenu,
-            Visible = true
+            Visible = false
         };
         _trayIcon.DoubleClick += (s, e) => { if (PromptAdminPassword("Abrir Configuración", topMost: true)) { ShowInTaskbar = true; Show(); WindowState = FormWindowState.Normal; } };
         SetTrayIcon(ServiceStatus.Unknown);
@@ -207,7 +207,6 @@ public class MainForm : Form
         btnSave.Top = _tabHome.Height - btnSave.Height - 15;
         btnSave.Click += (s, e) =>
         {
-            if (!PromptAdminPassword("Guardar Configuración")) return;
             var cfg = LoadConfig();
             if (cfg == null) return;
             cfg.MinioEndpoint = _txtConnEndpoint.Text;
@@ -271,7 +270,7 @@ public class MainForm : Form
         var btnSaveOrig = new Button { Text = "Guardar Cambios", Size = new Size(130, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
         btnSaveOrig.Left = _tabFolders.Width - btnSaveOrig.Width - 15;
         btnSaveOrig.Top = _tabFolders.Height - btnSaveOrig.Height - 15;
-        btnSaveOrig.Click += (s, e) => { if (!PromptAdminPassword("Guardar origenes")) return; SendIpc(Constants.CmdReconfig); MessageBox.Show("Configuración de origenes guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information); };
+        btnSaveOrig.Click += (s, e) => { SendIpc(Constants.CmdReconfig); MessageBox.Show("Configuración de origenes guardada.", "RPMC Backup", MessageBoxButtons.OK, MessageBoxIcon.Information); };
 
         var progGroup = new GroupBox { Text = "Progreso de sincronización", Location = new Point(10, 385), Size = new Size(500, 120) };
         _foldersProgressPanel = new FlowLayoutPanel { Location = new Point(10, 20), Size = new Size(480, 90), AutoScroll = true };
