@@ -53,6 +53,8 @@ public class BackupService : BackgroundService
             NextSyncTime = _nextLightweightSync > DateTime.MinValue ? _nextLightweightSync.ToString("yyyy-MM-dd HH:mm:ss") : "",
             DataError = _dataError,
             ConnectionError = _connectionError,
+            DebounceConfiguredMs = _watcher?.ConfiguredMs ?? 0,
+            DebounceRemainingMs = _watcher?.GetRemainingMs() ?? 0,
             FoldersProgress = _folderTotal.Select(kv => new FolderProgress
             {
                 Folder = kv.Key,

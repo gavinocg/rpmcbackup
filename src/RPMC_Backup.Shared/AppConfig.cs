@@ -61,6 +61,8 @@ public class ServiceStateInfo
     public string DataError { get; set; } = string.Empty;
     public string ConnectionError { get; set; } = string.Empty;
     public string NextSyncTime { get; set; } = string.Empty;
+    public int DebounceConfiguredMs { get; set; }
+    public int DebounceRemainingMs { get; set; }
     public List<FolderProgress> FoldersProgress { get; set; } = new();
 }
 

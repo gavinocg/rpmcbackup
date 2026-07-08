@@ -14,6 +14,8 @@ public class FolderWatcher : IDisposable
     private readonly Action? _onBatchComplete;
     private readonly int _debounceMs;
     private bool _running;
+    private DateTime _lastDebounceStart = DateTime.MinValue;
+    private bool _debounceActive;
 
     public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null, int debounceMs = 180000)
     {
@@ -66,6 +68,8 @@ public class FolderWatcher : IDisposable
             _pending[e.FullPath] = DateTime.UtcNow;
         }
         _debounceTimer?.Change(_debounceMs, Timeout.Infinite);
+        _lastDebounceStart = DateTime.UtcNow;
+        _debounceActive = true;
     }
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
@@ -80,8 +84,18 @@ public class FolderWatcher : IDisposable
         catch { }
     }
 
+    public int ConfiguredMs => _debounceMs;
+    public bool DebounceActive => _debounceActive;
+    public int GetRemainingMs()
+    {
+        if (!_debounceActive) return 0;
+        var elapsed = (int)(DateTime.UtcNow - _lastDebounceStart).TotalMilliseconds;
+        return Math.Max(0, _debounceMs - elapsed);
+    }
+
     private async void DebounceElapsed(object? state)
     {
+        _debounceActive = false;
         Dictionary<string, string> files;
         lock (_lock)
         {
