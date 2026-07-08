@@ -35,7 +35,7 @@ public class FolderWatcher : IDisposable
             {
                 IncludeSubdirectories = folder.Recursive,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-                InternalBufferSize = 65536,
+                InternalBufferSize = 1048576,
                 EnableRaisingEvents = false
             };
             watcher.Created += OnChanged;
@@ -131,6 +131,7 @@ public class FolderWatcher : IDisposable
             catch { }
         }
         _onBatchComplete?.Invoke();
+        _logger?.Invoke($"[FolderWatcher] Debounce completed: {files.Count} files processed");
     }
 
     public void Dispose()
