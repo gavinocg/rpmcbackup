@@ -9,20 +9,16 @@ public class FolderWatcher : IDisposable
     private readonly Dictionary<string, DateTime> _pending = new();
     private readonly object _lock = new();
     private Timer? _debounceTimer;
-    private readonly Func<string, string, Task> _onChange;
-    private readonly Action<int>? _onBatchStart;
-    private readonly Action<int>? _onBatchComplete;
+    private readonly Func<string, Task>? _onFolderSync;
     private readonly Action<string>? _logger;
     private readonly int _debounceMs;
     private bool _running;
     private DateTime _lastDebounceStart = DateTime.MinValue;
     private bool _debounceActive;
 
-    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action<int>? onBatchComplete = null, int debounceMs = 180000, Action<string>? logger = null)
+    public FolderWatcher(List<FolderConfig> folders, Func<string, Task>? onFolderSync = null, int debounceMs = 180000, Action<string>? logger = null)
     {
-        _onChange = onChange;
-        _onBatchStart = onBatchStart;
-        _onBatchComplete = onBatchComplete;
+        _onFolderSync = onFolderSync;
         _debounceMs = debounceMs;
         _logger = logger;
         foreach (var folder in folders)
@@ -99,39 +95,33 @@ public class FolderWatcher : IDisposable
     {
         _debounceActive = false;
         _logger?.Invoke($"[FolderWatcher] DebounceElapsed triggered, pending={_pending.Count}");
-        Dictionary<string, string> files;
+        HashSet<string> affectedFolders;
         lock (_lock)
         {
-            files = new Dictionary<string, string>();
+            affectedFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in _pending)
             {
                 var watcher = _watchers.FirstOrDefault(w => kv.Key.StartsWith(w.Path, StringComparison.OrdinalIgnoreCase));
                 if (watcher != null)
-                    files[kv.Key] = watcher.Path;
+                    affectedFolders.Add(watcher.Path);
             }
             _pending.Clear();
         }
 
-        if (_onChange == null) { _logger?.Invoke("[FolderWatcher] _onChange is NULL, aborting"); return; }
-        _onBatchStart?.Invoke(files.Count);
+        if (_onFolderSync == null) { _logger?.Invoke("[FolderWatcher] _onFolderSync is NULL, aborting"); return; }
 
-        foreach (var (fullPath, folder) in files)
+        foreach (var folder in affectedFolders)
         {
             try
             {
-                var cfg = new ConfigManager().Load();
-                var patterns = cfg?.Folders
-                    .Where(f => fullPath.StartsWith(f.Path, StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(f => f.ExcludePatterns)
-                    .ToList();
-                if (patterns != null && IsExcluded(fullPath, patterns)) continue;
-
-                await _onChange(folder, fullPath);
+                _logger?.Invoke($"[FolderWatcher] Syncing folder: {folder}");
+                await _onFolderSync(folder);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger?.Invoke($"[FolderWatcher] Error syncing folder {folder}: {ex.Message}");
+            }
         }
-        _logger?.Invoke($"[FolderWatcher] Debounce completed: {files.Count} files processed");
-        _onBatchComplete?.Invoke(files.Count);
     }
 
     public void Dispose()
@@ -139,35 +129,5 @@ public class FolderWatcher : IDisposable
         Stop();
         foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
         _debounceTimer?.Dispose();
-    }
-
-    private static bool IsExcluded(string filePath, List<string> excludePatterns)
-    {
-        if (excludePatterns == null || excludePatterns.Count == 0) return false;
-        foreach (var pattern in excludePatterns)
-        {
-            if (string.IsNullOrEmpty(pattern)) continue;
-            if (pattern.StartsWith("*."))
-            {
-                var ext = pattern.TrimStart('*');
-                if (System.IO.Path.GetExtension(filePath).Equals(ext, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            else
-            {
-                var searchStr = "\\" + pattern.TrimEnd('\\', '/') + "\\";
-                if (filePath.IndexOf(searchStr, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
-                if (filePath.EndsWith("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
-                    return true;
-                if (filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    var remainder = filePath.Substring(filePath.IndexOf("\\" + pattern.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) + pattern.Length + 1);
-                    if (remainder.Length == 0 || remainder.StartsWith("\\"))
-                        return true;
-                }
-            }
-        }
-        return false;
     }
 }
