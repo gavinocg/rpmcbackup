@@ -30,7 +30,7 @@ AppMutex=RPMCBackupMutex
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
-Source: "..\src\RPMC_Backup.Service\bin\Release\net8.0\publish\*"; DestDir: "{app}\service"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
+Source: "..\src\RPMC_Backup.Service\bin\Release\net8.0\win-x64\publish\*"; DestDir: "{app}\service"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "..\src\RPMC_Backup.Config\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "..\src\RPMC_Backup.UninstallCheck\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion

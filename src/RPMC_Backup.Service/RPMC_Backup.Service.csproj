@@ -4,6 +4,8 @@
     <Version>1.0.1</Version>
     <FileVersion>1.0.1.0</FileVersion>
     <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-RPMC_Backup.Service-a63d33bc-3b5f-4187-a179-eb376c06ed1d</UserSecretsId>
