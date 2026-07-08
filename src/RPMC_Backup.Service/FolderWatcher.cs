@@ -11,14 +11,14 @@ public class FolderWatcher : IDisposable
     private Timer? _debounceTimer;
     private readonly Func<string, string, Task> _onChange;
     private readonly Action<int>? _onBatchStart;
-    private readonly Action? _onBatchComplete;
+    private readonly Action<int>? _onBatchComplete;
     private readonly Action<string>? _logger;
     private readonly int _debounceMs;
     private bool _running;
     private DateTime _lastDebounceStart = DateTime.MinValue;
     private bool _debounceActive;
 
-    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null, int debounceMs = 180000, Action<string>? logger = null)
+    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action<int>? onBatchComplete = null, int debounceMs = 180000, Action<string>? logger = null)
     {
         _onChange = onChange;
         _onBatchStart = onBatchStart;
@@ -130,8 +130,8 @@ public class FolderWatcher : IDisposable
             }
             catch { }
         }
-        _onBatchComplete?.Invoke();
         _logger?.Invoke($"[FolderWatcher] Debounce completed: {files.Count} files processed");
+        _onBatchComplete?.Invoke(files.Count);
     }
 
     public void Dispose()

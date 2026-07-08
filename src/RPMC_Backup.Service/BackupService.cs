@@ -109,7 +109,7 @@ public class BackupService : BackgroundService
                 _watcher = new FolderWatcher(config.Folders, async (folder, filename) =>
                 {
                     await OnFileChanged(folder, filename, stoppingToken);
-                }, batchSize => OnBatchStart(batchSize), () => _isSyncing = false, config.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
+                }, batchSize => OnBatchStart(batchSize), count => { _isSyncing = false; if (count > 0) LogSystem(0, $"Sincronización FileWatcher completada: {count} archivos."); }, config.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
                 _watcher.Start();
 
                 var cfgEx = _config.Load();
@@ -394,7 +394,7 @@ public class BackupService : BackgroundService
                     _watcher?.Stop();
                     (_watcher as IDisposable)?.Dispose();
                     _uploader = new MinioUploader(c);
-                    _watcher = new FolderWatcher(c.Folders, async (f, fn) => await OnFileChanged(f, fn, CancellationToken.None), batchSize => OnBatchStart(batchSize), () => _isSyncing = false, c.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
+                    _watcher = new FolderWatcher(c.Folders, async (f, fn) => await OnFileChanged(f, fn, CancellationToken.None), batchSize => OnBatchStart(batchSize), count => { _isSyncing = false; if (count > 0) LogSystem(0, $"Sincronización FileWatcher completada: {count} archivos."); }, c.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
                     _watcher.Start();
                     _ = Task.Run(async () => await RunInitialFullSync(c, CancellationToken.None));
                     LogSystem(0, "ConfiguraciÃ³n recargada.");
