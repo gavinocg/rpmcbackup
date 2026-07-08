@@ -475,8 +475,7 @@ public class BackupService : BackgroundService
 
     private async Task OnFileChanged(string folder, string filename, CancellationToken ct, string source = "FileWatcher")
     {
-        if (_uploader == null) return;
-        if (_status != ServiceStatus.Running && _status != ServiceStatus.Degraded) return;
+        if (_uploader == null || _status == ServiceStatus.Stopped) return;
         var filePath = System.IO.Path.Combine(folder, filename);
         if (_excludedFiles.Contains(filePath)) return;
         if (!File.Exists(filePath)) return;
