@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using RPMC_Backup.Shared;
 
 namespace RPMC_Backup.Service;
@@ -12,17 +12,19 @@ public class FolderWatcher : IDisposable
     private readonly Func<string, string, Task> _onChange;
     private readonly Action<int>? _onBatchStart;
     private readonly Action? _onBatchComplete;
+    private readonly Action<string>? _logger;
     private readonly int _debounceMs;
     private bool _running;
     private DateTime _lastDebounceStart = DateTime.MinValue;
     private bool _debounceActive;
 
-    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null, int debounceMs = 180000)
+    public FolderWatcher(List<FolderConfig> folders, Func<string, string, Task> onChange, Action<int>? onBatchStart = null, Action? onBatchComplete = null, int debounceMs = 180000, Action<string>? logger = null)
     {
         _onChange = onChange;
         _onBatchStart = onBatchStart;
         _onBatchComplete = onBatchComplete;
         _debounceMs = debounceMs;
+        _logger = logger;
         foreach (var folder in folders)
         {
             if (!Directory.Exists(folder.Path))
@@ -96,6 +98,7 @@ public class FolderWatcher : IDisposable
     private async void DebounceElapsed(object? state)
     {
         _debounceActive = false;
+        _logger?.Invoke($"[FolderWatcher] DebounceElapsed triggered, pending={_pending.Count}");
         Dictionary<string, string> files;
         lock (_lock)
         {
@@ -109,6 +112,7 @@ public class FolderWatcher : IDisposable
             _pending.Clear();
         }
 
+        if (_onChange == null) { _logger?.Invoke("[FolderWatcher] _onChange is NULL, aborting"); return; }
         _onBatchStart?.Invoke(files.Count);
 
         foreach (var (fullPath, folder) in files)

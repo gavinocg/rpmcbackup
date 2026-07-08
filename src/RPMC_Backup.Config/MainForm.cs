@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO.Pipes;
 using System.Net;
@@ -37,6 +37,9 @@ public class MainForm : Form
     private Button _btnConnTest;
     private NumericUpDown _numDebounceOrig;
     private ComboBox _cmbDebounceOrigUnit;
+    private NumericUpDown _numLigero;
+    private ComboBox _cmbLigeroUnit;
+    private Label _lblNextSyncOrig;
     private Label _lblConnResult;
     private TextBox _txtSmtpHost, _txtSmtpPort, _txtSmtpUser, _txtSmtpPass, _txtSmtpFrom, _txtAdminEmailConfig;
     private CheckBox _chkSmtpSsl;
@@ -262,10 +265,11 @@ public class MainForm : Form
             {
                 cfg.WatcherDebounceMs = (int)_numDebounceOrig.Value * (_cmbDebounceOrigUnit.Text switch
                 {
-                    "Horas" => 3600000,
-                    "Minutos" => 60000,
+                    "Hor." => 3600000,
+                    "Min." => 60000,
                     _ => 1000
                 });
+                cfg.LightweightSyncIntervalMs = (int)_numLigero.Value * (_cmbLigeroUnit.Text == "Hor." ? 3600000 : 60000);
                 SaveConfig(cfg);
             }
             SendIpc(Constants.CmdReconfig);
@@ -278,16 +282,23 @@ public class MainForm : Form
 
         // Timer sync group
         var timerGroup = new GroupBox { Text = "Timer sync (N):", Location = new Point(520, 385), Size = new Size(370, 120) };
-        var lblIntervalo = new Label { Text = "Intervalo:", Location = new Point(10, 25), AutoSize = true };
-        _numDebounceOrig = new NumericUpDown { Location = new Point(90, 22), Width = 60, Minimum = 1, Maximum = 3600, Value = 3 };
-        _cmbDebounceOrigUnit = new ComboBox { Location = new Point(160, 22), Width = 90, DropDownStyle = ComboBoxStyle.DropDownList };
-        _cmbDebounceOrigUnit.Items.AddRange(new[] { "Segundos", "Minutos", "Horas" });
-        _cmbDebounceOrigUnit.SelectedIndex = 1;
-        LoadDebounceConfig();
-        var lblRestante = new Label { Text = "Tiempo restante:", Location = new Point(10, 55), AutoSize = true };
-        var lblCountdown = new Label { Location = new Point(120, 55), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        var lblFw = new Label { Text = "FileWatcher:", Location = new Point(10, 15), AutoSize = true, Font = new Font("Segoe UI", 8, FontStyle.Bold) };
+        _numDebounceOrig = new NumericUpDown { Location = new Point(100, 12), Width = 60, Minimum = 1, Maximum = 3600, Value = 30 };
+        _cmbDebounceOrigUnit = new ComboBox { Location = new Point(170, 12), Width = 80, DropDownStyle = ComboBoxStyle.DropDownList };
+        _cmbDebounceOrigUnit.Items.AddRange(new[] { "Seg.", "Min.", "Hor." });
+        _cmbDebounceOrigUnit.SelectedIndex = 0;
+        var lblRestante = new Label { Text = "Restante:", Location = new Point(260, 14), AutoSize = true };
+        var lblCountdown = new Label { Location = new Point(315, 14), AutoSize = true, Font = new Font("Segoe UI", 8, FontStyle.Bold) };
         lblCountdown.Text = "--:--";
-        timerGroup.Controls.AddRange(new Control[] { lblIntervalo, _numDebounceOrig, _cmbDebounceOrigUnit, lblRestante, lblCountdown });
+        var lblLig = new Label { Text = "Ligero:", Location = new Point(10, 40), AutoSize = true, Font = new Font("Segoe UI", 8, FontStyle.Bold) };
+        _numLigero = new NumericUpDown { Location = new Point(100, 37), Width = 60, Minimum = 1, Maximum = 8760, Value = 6 };
+        _cmbLigeroUnit = new ComboBox { Location = new Point(170, 37), Width = 80, DropDownStyle = ComboBoxStyle.DropDownList };
+        _cmbLigeroUnit.Items.AddRange(new[] { "Min.", "Hor." });
+        _cmbLigeroUnit.SelectedIndex = 1;
+        _lblNextSyncOrig = new Label { Location = new Point(100, 60), AutoSize = true, ForeColor = Color.Gray, Font = new Font("Segoe UI", 7, FontStyle.Regular) };
+        LoadDebounceConfig();
+        timerGroup.Controls.AddRange(new Control[] { lblFw, _numDebounceOrig, _cmbDebounceOrigUnit, lblRestante, lblCountdown,
+            lblLig, _numLigero, _cmbLigeroUnit, _lblNextSyncOrig });
 
         // Local timer for countdown update
         var cdt = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -298,6 +309,7 @@ public class MainForm : Form
                 lblCountdown.Text = TimeSpan.FromMilliseconds(st.DebounceRemainingMs).ToString(@"mm\:ss");
             else
                 lblCountdown.Text = "--:--";
+            _lblNextSyncOrig.Text = !string.IsNullOrEmpty(st?.NextSyncTime) ? $"Próxima: {st.NextSyncTime}" : "";
         };
         cdt.Start();
 
@@ -741,11 +753,19 @@ public class MainForm : Form
     {
         var cfg = LoadConfig();
         if (cfg == null || _numDebounceOrig == null) return;
-        var ms = cfg.WatcherDebounceMs;
-        if (ms <= 0) return;
-        if (ms >= 3600000 && ms % 3600000 == 0) { _numDebounceOrig.Value = ms / 3600000; _cmbDebounceOrigUnit.SelectedIndex = 2; }
-        else if (ms >= 60000 && ms % 60000 == 0) { _numDebounceOrig.Value = ms / 60000; _cmbDebounceOrigUnit.SelectedIndex = 1; }
-        else { _numDebounceOrig.Value = ms / 1000; _cmbDebounceOrigUnit.SelectedIndex = 0; }
+        var w = cfg.WatcherDebounceMs;
+        if (w > 0)
+        {
+            if (w >= 3600000 && w % 3600000 == 0) { _numDebounceOrig.Value = w / 3600000; _cmbDebounceOrigUnit.SelectedIndex = 2; }
+            else if (w >= 60000 && w % 60000 == 0) { _numDebounceOrig.Value = w / 60000; _cmbDebounceOrigUnit.SelectedIndex = 1; }
+            else { _numDebounceOrig.Value = w / 1000; _cmbDebounceOrigUnit.SelectedIndex = 0; }
+        }
+        var l = cfg.LightweightSyncIntervalMs;
+        if (l > 0)
+        {
+            if (l >= 3600000 && l % 3600000 == 0) { _numLigero.Value = l / 3600000; _cmbLigeroUnit.SelectedIndex = 1; }
+            else { _numLigero.Value = l / 60000; _cmbLigeroUnit.SelectedIndex = 0; }
+        }
     }
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)

@@ -109,7 +109,7 @@ public class BackupService : BackgroundService
                 _watcher = new FolderWatcher(config.Folders, async (folder, filename) =>
                 {
                     await OnFileChanged(folder, filename, stoppingToken);
-                }, batchSize => OnBatchStart(batchSize), () => _isSyncing = false, config.WatcherDebounceMs);
+                }, batchSize => OnBatchStart(batchSize), () => _isSyncing = false, config.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
                 _watcher.Start();
 
                 var cfgEx = _config.Load();
@@ -394,7 +394,7 @@ public class BackupService : BackgroundService
                     _watcher?.Stop();
                     (_watcher as IDisposable)?.Dispose();
                     _uploader = new MinioUploader(c);
-                    _watcher = new FolderWatcher(c.Folders, async (f, fn) => await OnFileChanged(f, fn, CancellationToken.None), batchSize => OnBatchStart(batchSize), () => _isSyncing = false, c.WatcherDebounceMs);
+                    _watcher = new FolderWatcher(c.Folders, async (f, fn) => await OnFileChanged(f, fn, CancellationToken.None), batchSize => OnBatchStart(batchSize), () => _isSyncing = false, c.WatcherDebounceMs, msg => _logger.LogInformation("{msg}", msg));
                     _watcher.Start();
                     _ = Task.Run(async () => await RunInitialFullSync(c, CancellationToken.None));
                     LogSystem(0, "ConfiguraciÃ³n recargada.");
@@ -402,8 +402,8 @@ public class BackupService : BackgroundService
                 return new IpcResponse { Success = true, Message = "Configuration reloaded" };
 
             case Constants.CmdSyncNow:
-                _ = Task.Run(async () => await RunSyncNowAsync(CancellationToken.None));
-                LogSystem(0, "SincronizaciÃ³n manual solicitada.");
+                _ = Task.Run(async () => await RunLightweightSyncOnce(CancellationToken.None));
+                LogSystem(0, "Sincronización manual solicitada.");
                 return new IpcResponse { Success = true, Message = "Sync started" };
 
             case Constants.CmdClearLogs:
@@ -633,6 +633,61 @@ public class BackupService : BackgroundService
         }
     }
 
+    private async Task RunLightweightSyncOnce(CancellationToken ct)
+    {
+        if (_status != ServiceStatus.Running || _uploader == null) return;
+        var config = _config.Load();
+        if (config == null) return;
+
+        _logger.LogInformation("Lightweight sync: comparing source vs bucket...");
+        _isVerifying = true;
+
+        var prefix = $"{config.MachineName}/{config.MachineUserName}/";
+        var totalUploaded = 0;
+
+        foreach (var folder in config.Folders ?? new())
+        {
+            if (!Directory.Exists(folder.Path) || ct.IsCancellationRequested) continue;
+
+            var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
+            var folderPrefix = $"{prefix}{folderName}/";
+
+            Dictionary<string, DateTime>? existing = null;
+            try
+            {
+                existing = await _uploader.ListExistingObjectsAsync(folderPrefix, ct);
+            }
+            catch
+            {
+                _logger.LogWarning("Lightweight sync: could not list bucket for {Folder}", folderName);
+            }
+
+            var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var localFiles = Directory.GetFiles(folder.Path, "*", searchOpt)
+                .Where(f => !IsExcluded(f, folder.ExcludePatterns) && new FileInfo(f).Length > 0);
+
+            foreach (var file in localFiles)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                var relPath = file.Substring(folder.Path.TrimEnd('\\', '/').Length).TrimStart('\\', '/').Replace('\\', '/');
+                var s3Key = $"{prefix}{folderName}/{relPath}";
+
+                if (existing != null && existing.TryGetValue(s3Key, out var bucketTs))
+                {
+                    var localTs = File.GetLastWriteTimeUtc(file);
+                    if (localTs <= bucketTs) continue;
+                }
+
+                await OnFileChanged(folder.Path, file, ct, "Lightweight");
+                totalUploaded++;
+            }
+        }
+
+        _isVerifying = false;
+        _logger.LogInformation("Lightweight sync completed: {Count} files uploaded.", totalUploaded);
+    }
+
     private async Task LightweightSyncAsync(CancellationToken ct)
     {
         var firstRun = true;
@@ -645,58 +700,7 @@ public class BackupService : BackgroundService
                 firstRun = false;
                 _nextLightweightSync = DateTime.UtcNow.AddMilliseconds(intervalMs);
                 await Task.Delay(intervalMs, ct);
-                if (_status != ServiceStatus.Running || _uploader == null) continue;
-
-                var config = _config.Load();
-                if (config == null) continue;
-
-                _logger.LogInformation("Lightweight sync: comparing source vs bucket...");
-                _isVerifying = true;
-
-                var prefix = $"{config.MachineName}/{config.MachineUserName}/";
-                var totalUploaded = 0;
-
-                foreach (var folder in config.Folders ?? new())
-                {
-                    if (!Directory.Exists(folder.Path) || ct.IsCancellationRequested) continue;
-
-                    var folderName = Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
-                    var folderPrefix = $"{prefix}{folderName}/";
-
-                    Dictionary<string, DateTime>? existing = null;
-                    try
-                    {
-                        existing = await _uploader.ListExistingObjectsAsync(folderPrefix, ct);
-                    }
-                    catch
-                    {
-                        _logger.LogWarning("Lightweight sync: could not list bucket for {Folder}", folderName);
-                    }
-
-                    var searchOpt = folder.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                    var localFiles = Directory.GetFiles(folder.Path, "*", searchOpt)
-                        .Where(f => !IsExcluded(f, folder.ExcludePatterns) && new FileInfo(f).Length > 0);
-
-                    foreach (var file in localFiles)
-                    {
-                        if (ct.IsCancellationRequested) break;
-
-                        var relPath = file.Substring(folder.Path.TrimEnd('\\', '/').Length).TrimStart('\\', '/').Replace('\\', '/');
-                        var s3Key = $"{prefix}{folderName}/{relPath}";
-
-                        if (existing != null && existing.TryGetValue(s3Key, out var bucketTs))
-                        {
-                            var localTs = File.GetLastWriteTimeUtc(file);
-                            if (localTs <= bucketTs) continue;
-                        }
-
-                        await OnFileChanged(folder.Path, file, ct, "Lightweight");
-                        totalUploaded++;
-                    }
-                }
-
-                _isVerifying = false;
-                _logger.LogInformation("Lightweight sync completed: {Count} files uploaded.", totalUploaded);
+                await RunLightweightSyncOnce(ct);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
