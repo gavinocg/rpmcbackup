@@ -33,6 +33,7 @@ public class BackupService : BackgroundService
     private volatile string _dataError = string.Empty;
     private volatile string _connectionError = string.Empty;
     private int _healthCheckCounter;
+    private volatile int _lockedFilesCount;
     private HashSet<string> _excludedFiles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _folderTotal = new();
     private readonly Dictionary<string, int> _folderCompleted = new();
@@ -61,7 +62,8 @@ public class BackupService : BackgroundService
                 Folder = kv.Key,
                 Total = kv.Value,
                 Completed = _folderCompleted.TryGetValue(kv.Key, out var c) ? c : 0
-            }).ToList()
+            }).ToList(),
+            LockedFilesCount = _lockedFilesCount
         };
     }
 
@@ -470,15 +472,14 @@ public class BackupService : BackgroundService
 
         if (IsFileLocked(filePath))
         {
-            lock (_retryQueue) _retryQueue.Enqueue(filePath);
-            _logger.LogInformation("File in use, queued for retry: {File}", filename);
+            Interlocked.Increment(ref _lockedFilesCount);
             _logDb.Insert(new SyncLogEntry
             {
                 Timestamp = DateTime.Now.ToString("o"),
-                Level = (int)RPMC_Backup.Shared.LogLevel.Warn,
+                Level = (int)RPMC_Backup.Shared.LogLevel.Error,
                 Folder = folder,
                 Filename = filename,
-                Message = $"({source}) Archivo en uso, se reintentará automáticamente.",
+                Message = $"({source}) Archivo bloqueado {filename}, verificar y sincronizar manualmente (Botón Reintentar).",
             });
             return -3;
         }

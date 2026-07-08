@@ -860,7 +860,8 @@ public class MainForm : Form
             _trayIcon.Text = info.TrayText;
             _lblLastSync.Text = !string.IsNullOrEmpty(state.LastSyncTime) ? $"Última sincronización: {state.LastSyncTime}" : "Sin sincronizaciones";
             _lblErrors.Text = state.Errors24h >= 0 ? $"Errores (24h): {state.Errors24h}" : "Servicio no disponible";
-            _lblPending.Text = $"Archivos encolados: {state.PendingFiles} | Total: {FormatBytes(state.TotalBytesUploaded)} ({state.TotalFilesUploaded} archivos)";
+            _lblPending.Text = $"Archivos encolados: {state.PendingFiles} | Total: {FormatBytes(state.TotalBytesUploaded)} ({state.TotalFilesUploaded} archivos) | Bloqueados: {state.LockedFilesCount}";
+            _lblPending.Font = new Font(_lblPending.Font, FontStyle.Bold);
             _btnStop.Text = state.Status == ServiceStatus.Stopped ? "Iniciar" : "Detener";
             _btnStop.Enabled = (state.Status is ServiceStatus.Running or ServiceStatus.Stopped) && !state.IsVerifying;
             UpdateFoldersProgress(state);

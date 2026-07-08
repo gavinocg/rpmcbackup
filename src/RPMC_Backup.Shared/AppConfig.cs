@@ -63,6 +63,7 @@ public class ServiceStateInfo
     public string NextSyncTime { get; set; } = string.Empty;
     public int DebounceConfiguredMs { get; set; }
     public int DebounceRemainingMs { get; set; }
+    public int LockedFilesCount { get; set; }
     public List<FolderProgress> FoldersProgress { get; set; } = new();
 }
 
