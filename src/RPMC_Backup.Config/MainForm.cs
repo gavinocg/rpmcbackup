@@ -348,7 +348,7 @@ public class MainForm : Form
     {
         var filterPanel = new Panel { Location = new Point(10, 10), Size = new Size(850, 40) };
         _cmbLogLevel = new ComboBox { Location = new Point(0, 5), Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
-        _cmbLogLevel.Items.AddRange(new[] { "Todos", "Info", "Warn", "Error" });
+        _cmbLogLevel.Items.AddRange(new[] { "Todos", "Info", "Warn", "Error", "Excluido" });
         _cmbLogLevel.SelectedIndex = 0;
         _txtSearch = new TextBox { Location = new Point(130, 5), Width = 200, PlaceholderText = "Buscar archivo..." };
         _btnFilter = new Button { Location = new Point(340, 3), Size = new Size(80, 25), Text = "Filtrar" };
@@ -948,8 +948,15 @@ public class MainForm : Form
             using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
             conn.Open();
             var sql = "SELECT timestamp, level, folder, filename, message FROM sync_logs WHERE 1=1";
-            var levelIdx = _cmbLogLevel.SelectedIndex;
-            if (levelIdx > 0) sql += $" AND level = {levelIdx - 1}";
+            var levelFilter = -1;
+            switch (_cmbLogLevel.Text)
+            {
+                case "Info": levelFilter = 0; break;
+                case "Warn": levelFilter = 1; break;
+                case "Error": levelFilter = 2; break;
+                case "Excluido": levelFilter = 4; break;
+            }
+            if (levelFilter >= 0) sql += $" AND level = {levelFilter}";
             if (!string.IsNullOrEmpty(_txtSearch.Text))
                 sql += $" AND (filename LIKE '%{_txtSearch.Text.Replace("'", "''")}%' OR message LIKE '%{_txtSearch.Text.Replace("'", "''")}%')";
             sql += " ORDER BY id DESC LIMIT 500";
@@ -963,7 +970,7 @@ public class MainForm : Form
                 var folder = reader.IsDBNull(2) ? "" : reader.GetString(2);
                 var file = reader.IsDBNull(3) ? "" : reader.GetString(3);
                 var msg = reader.IsDBNull(4) ? "" : reader.GetString(4);
-                var levelStr = level switch { 0 => "I", 1 => "W", 2 => "E", 3 => "F", _ => "?" };
+                var levelStr = level switch { 0 => "I", 1 => "W", 2 => "E", 3 => "F", 4 => "X", _ => "?" };
                 if (ts.Length > 19) ts = ts.Substring(0, 19).Replace("T", " ");
                 _logGrid.Rows.Add(ts, levelStr, Path.GetFileName(folder.TrimEnd('\\')), file, msg);
                 var row = _logGrid.Rows[_logGrid.Rows.Count - 1];

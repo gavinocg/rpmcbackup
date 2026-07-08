@@ -422,6 +422,14 @@ public class BackupService : BackgroundService
                         cfg2.ExcludedFiles = _excludedFiles.ToList();
                         _config.Save(cfg2);
                     }
+                    _logDb.Insert(new SyncLogEntry
+                    {
+                        Timestamp = DateTime.Now.ToString("o"),
+                        Level = 4,
+                        Folder = Path.GetDirectoryName(exclPath2) ?? "",
+                        Filename = exclPath2,
+                        Message = "Archivo agregado a exclusión.",
+                    });
                 }
                 return new IpcResponse { Success = true, Message = "File excluded" };
 
