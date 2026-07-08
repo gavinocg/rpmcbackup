@@ -290,7 +290,7 @@ public class BackupService : BackgroundService
             foreach (var file in folderFiles)
             {
                 if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
-                await OnFileChanged(folderPath, file, ct);
+                await OnFileChanged(folderPath, file, ct, "Initial");
                 _syncCompleted++;
                 _folderCompleted[folderPath] = _syncCompleted;
                 totalProcessed++;
@@ -473,7 +473,7 @@ public class BackupService : BackgroundService
         }
     }
 
-    private async Task OnFileChanged(string folder, string filename, CancellationToken ct)
+    private async Task OnFileChanged(string folder, string filename, CancellationToken ct, string source = "FileWatcher")
     {
         if (_uploader == null) return;
         if (_status != ServiceStatus.Running && _status != ServiceStatus.Degraded) return;
@@ -491,7 +491,7 @@ public class BackupService : BackgroundService
                 Level = (int)RPMC_Backup.Shared.LogLevel.Warn,
                 Folder = folder,
                 Filename = filename,
-                Message = "Archivo en uso, se reintentarÃ¡ automÃ¡ticamente."
+                Message = $"({source}) Archivo en uso, se reintentará automáticamente.",
             });
             return;
         }
@@ -521,7 +521,7 @@ public class BackupService : BackgroundService
                 Filename = filename,
                 Bytes = bytes,
                 DurationMs = (int)sw.ElapsedMilliseconds,
-                Message = $"Uploaded {FormatBytes(bytes)} ({sw.ElapsedMilliseconds}ms)"
+                Message = $"({source}) Uploaded {FormatBytes(bytes)} ({sw.ElapsedMilliseconds}ms)",
             });
         }
         catch (Exception ex)
@@ -535,7 +535,7 @@ public class BackupService : BackgroundService
                 Level = (int)RPMC_Backup.Shared.LogLevel.Error,
                 Folder = folder,
                 Filename = filename,
-                Message = $"Upload failed: {ex.Message}",
+                Message = $"({source}) Upload failed: {ex.Message}",
                 ErrorCode = ex.GetType().Name,
                 ErrorDetail = ex.ToString(),
                 Suggestion = GetSuggestion(ex)
@@ -600,7 +600,7 @@ public class BackupService : BackgroundService
         foreach (var (folder, file) in fileList)
         {
             if (ct.IsCancellationRequested || _status is ServiceStatus.Stopped or ServiceStatus.Error) break;
-            await OnFileChanged(folder, file, ct);
+            await OnFileChanged(folder, file, ct, "Manual");
             _syncCompleted++;
             if (_folderCompleted.ContainsKey(folder)) _folderCompleted[folder]++;
         }
@@ -625,7 +625,7 @@ public class BackupService : BackgroundService
                 if (filePath != null && File.Exists(filePath) && !_excludedFiles.Contains(filePath))
                 {
                     var folder = Path.GetDirectoryName(filePath) ?? "";
-                    await OnFileChanged(folder, filePath, ct);
+                    await OnFileChanged(folder, filePath, ct, "Retry");
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -690,7 +690,7 @@ public class BackupService : BackgroundService
                             if (localTs <= bucketTs) continue;
                         }
 
-                        await OnFileChanged(folder.Path, file, ct);
+                        await OnFileChanged(folder.Path, file, ct, "Lightweight");
                         totalUploaded++;
                     }
                 }
