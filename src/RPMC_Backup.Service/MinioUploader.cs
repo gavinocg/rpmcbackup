@@ -65,6 +65,10 @@ public class MinioUploader
                     if (DateTime.TryParseExact(storedTime, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var stored) && stored == localLastWrite)
                         return;
                 }
+                else if (stat.Size == new FileInfo(filePath).Length)
+                {
+                    return;
+                }
             }
             catch { }
 
