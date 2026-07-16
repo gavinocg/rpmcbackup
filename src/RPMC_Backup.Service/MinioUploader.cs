@@ -53,6 +53,21 @@ public class MinioUploader
                 await _client.MakeBucketAsync(new MakeBucketArgs().WithBucket(_bucket), ct);
             }
 
+            var localLastWrite = File.GetLastWriteTimeUtc(filePath);
+            try
+            {
+                var statArgs = new StatObjectArgs()
+                    .WithBucket(_bucket)
+                    .WithObject(objectName);
+                var stat = await _client.StatObjectAsync(statArgs, ct);
+                if (stat.MetaData.TryGetValue("lastwritetime", out var storedTime))
+                {
+                    if (DateTime.TryParseExact(storedTime, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var stored) && stored == localLastWrite)
+                        return;
+                }
+            }
+            catch { }
+
             var contentType = GetContentType(filePath);
 
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -70,8 +85,9 @@ public class MinioUploader
 
             var canonicalUri = $"/{_bucket}/{encodedKey}";
             var canonicalQuery = "";
-            var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-            var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{UnsignedPayload}\nx-amz-date:{amzDate}\n";
+            var lastWriteHeader = localLastWrite.ToString("O");
+            var signedHeaders = "host;x-amz-content-sha256;x-amz-date;x-amz-meta-lastwritetime";
+            var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{UnsignedPayload}\nx-amz-date:{amzDate}\nx-amz-meta-lastwritetime:{lastWriteHeader}\n";
 
             var canonicalRequest = $"PUT\n{canonicalUri}\n{canonicalQuery}\n{canonicalHeaders}\n{signedHeaders}\n{UnsignedPayload}";
 
@@ -89,6 +105,7 @@ public class MinioUploader
             using var msg = new HttpRequestMessage(HttpMethod.Put, url) { Content = content };
             msg.Headers.TryAddWithoutValidation("x-amz-date", amzDate);
             msg.Headers.TryAddWithoutValidation("x-amz-content-sha256", UnsignedPayload);
+            msg.Headers.TryAddWithoutValidation("x-amz-meta-lastwritetime", lastWriteHeader);
             msg.Headers.TryAddWithoutValidation("Authorization", authorization);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
